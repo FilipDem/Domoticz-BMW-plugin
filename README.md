@@ -8,7 +8,7 @@ Domoticz plugin working with BMW Connected Drive. Currently it supports the keep
 
 If there are requests to integrate other information/functions, please leave a message.
 
-Currently only support for European vehicles.
+Currently the plugin does not support BMW Connected Drive cars in China and USA.
 
 ## Installation (linux)
 Follow this procedure to install the plugin.
