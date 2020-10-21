@@ -15,10 +15,16 @@
         <param field="Mode2" label="Password" width="200px" required="true" default="" password="true"/>
         <param field="Mode4" label="VIN" width="200px" required="true" default=""/>
         <param field="Mode5" label="Minutes between update" width="120px" required="true" default="5"/>
+        <param field="Mode3" label="API Type" width="200px" required="true" default="">
+            <options>
+                <option label="Legacy" value="Legacy"/>
+                <option label="New" value="New" default="New"/>
+            </options>
+        </param>
         <param field="Mode6" label="Debug" width="120px">
             <options>
                 <option label="True" value="Debug"/>
-                <option label="False" value="Normal" default="true"/>
+                <option label="False" value="Normal" default="True"/>
             </options>
         </param>
     </params>
@@ -49,7 +55,7 @@ _TIMEDOUT = 1
 
 #DEBUG
 _DEBUG_OFF = 0
-_DEBUG_ON = 2
+_DEBUG_ON = 1
 
 ################################################################################
 # Start Plugin
@@ -61,6 +67,8 @@ class BasePlugin:
         self.debug = _DEBUG_OFF
         self.token_expiration = None
         self.oauth_token = None
+        self.errorLevel = 0
+        self.expected_response_code = None
         self.runAgain = _MINUTE
         return
 
@@ -88,7 +96,10 @@ class BasePlugin:
         TimeoutDevice(All=True)
 
         # Connection parameters
-        self.httpConnAuth = Domoticz.Connection(Name="BmwAuth", Transport="TCP/IP", Protocol="HTTPS", Address='customer.bmwgroup.com', Port='443')
+        if Parameters['Mode3'] == 'Legacy':
+            self.httpConnAuth = Domoticz.Connection(Name="BmwAuth", Transport="TCP/IP", Protocol="HTTPS", Address='b2vapi.bmwgroup.com', Port='443')
+        else:
+            self.httpConnAuth = Domoticz.Connection(Name="BmwAuth", Transport="TCP/IP", Protocol="HTTPS", Address='customer.bmwgroup.com', Port='443')
         self.httpConnAuth.Connect()
 
         # Global settings
@@ -98,27 +109,40 @@ class BasePlugin:
         Domoticz.Debug("onStop called")
 
     def onConnect(self, Connection, Status, Description):
-        Domoticz.Debug("onConnect called ("+Connection.Name+")")
-        if Connection.Name == 'BmwAuth':
-            self.Get_oauth_token()
-        if Connection.Name == 'BmwApi':
-            self.Ask_vehicle_status()
+        Domoticz.Debug("onConnect called ("+Connection.Name+") with status="+str(Status))
+        if Status == 0:
+            if Connection.Name == 'BmwAuth':
+                self.Get_oauth_token()
+            if Connection.Name == 'BmwApi':
+                self.Ask_vehicle_status()
+        else:
+            self.errorLevel += 1
 
     def onMessage(self, Connection, Data):
         Domoticz.Debug("onMessage called ("+Connection.Name+")")
-        if Connection.Name == 'BmwAuth' and int(Data['Status']) == 302:
-            result_json = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(Data['Headers']['Location']).fragment))
-            self.oauth_token = result_json['access_token']
-            expiration_time = int(result_json['expires_in'])
-            self.token_expiration = datetime.datetime.now() + datetime.timedelta(seconds=expiration_time)
-            Domoticz.Debug(self.oauth_token)
-            self.httpConnAuth.Disconnect()
-            self.httpConnApi = Domoticz.Connection(Name="BmwApi", Transport="TCP/IP", Protocol="HTTPS", Address='b2vapi.bmwgroup.com', Port='443')
-            self.httpConnApi.Connect()
-        if Connection.Name == 'BmwApi' and int(Data['Status']) == 200:
-            result_json = json.loads(Data['Data'])
-            Domoticz.Debug(str(result_json['vehicleStatus']['mileage']))
-            UpdateDevice(_UNIT_MILEAGE, result_json['vehicleStatus']['mileage'], result_json['vehicleStatus']['mileage'], Images[_IMAGE].ID)
+        if Connection.Name == 'BmwAuth':
+            if int(Data['Status']) == self.expected_response_code:
+                if Parameters['Mode3'] == 'Legacy':
+                    result_json = json.loads(Data['Data'])
+                else:
+                    result_json = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(Data['Headers']['Location']).fragment))
+                self.oauth_token = result_json['access_token']
+                expiration_time = int(result_json['expires_in'])
+                self.token_expiration = datetime.datetime.now() + datetime.timedelta(seconds=expiration_time)
+                Domoticz.Debug(self.oauth_token)
+                self.httpConnAuth.Disconnect()
+                self.httpConnApi = Domoticz.Connection(Name="BmwApi", Transport="TCP/IP", Protocol="HTTPS", Address='b2vapi.bmwgroup.com', Port='443')
+                self.httpConnApi.Connect()
+            else:
+                self.errorLevel += 1
+        if Connection.Name == 'BmwApi':
+            if int(Data['Status']) == 200:
+                result_json = json.loads(Data['Data'])
+                Domoticz.Debug(str(result_json['vehicleStatus']['mileage']))
+                UpdateDevice(_UNIT_MILEAGE, result_json['vehicleStatus']['mileage'], result_json['vehicleStatus']['mileage'], Images[_IMAGE].ID)
+                self.errorLevel = 0
+            else:
+                self.errorLevel += 1
 
     def onCommand(self, Unit, Command, Level, Hue):
         Domoticz.Debug("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
@@ -150,18 +174,38 @@ class BasePlugin:
 
             # Run again following the period in the settings
             self.runAgain = _MINUTE*int(Parameters['Mode5'])
+            
+            # If no correct communication in some trials...
+            if self.errorLevel == 5:
+                Domoticz.Error("Too many errors received: devices are timedout!")
+                TimeoutDevice(True)
+            
         else:
             Domoticz.Debug("onHeartbeat called, run again in "+str(self.runAgain)+" heartbeats.")
 
     def Get_oauth_token(self):
-        values = {
-            'scope': 'authenticate_user vehicle_data remote_services', \
-            'username': Parameters['Mode1'], \
-            'password': Parameters['Mode2'], \
-            'client_id': 'dbf0a542-ebd1-4ff0-a9a7-55172fbfce35', \
-            'response_type': 'token', \
-            'redirect_uri': 'https://www.bmw-connecteddrive.com/app/static/external-dispatch.html'
-        }
+        Domoticz.Debug("API Mode used: "+Parameters['Mode3'])
+        if Parameters['Mode3'] == 'Legacy':
+            values = {
+                'scope': 'authenticate_user vehicle_data remote_services', \
+                'username': Parameters['Mode1'], \
+                'password': Parameters['Mode2'], \
+                'grant_type': 'password'
+            }
+            url = '/gcdm/oauth/token'
+            self.expected_response_code = 200
+        else:
+            values = {
+                'scope': 'authenticate_user vehicle_data remote_services', \
+                'username': Parameters['Mode1'], \
+                'password': Parameters['Mode2'], \
+                'client_id': 'dbf0a542-ebd1-4ff0-a9a7-55172fbfce35', \
+                'response_type': 'token', \
+                'redirect_uri': 'https://www.bmw-connecteddrive.com/app/static/external-dispatch.html'
+            }
+            url = '/gcdm/oauth/authenticate'
+            self.expected_response_code = 302
+
         data = urllib.parse.urlencode(values)
         headers = {
             'Content-Type': 'application/x-www-form-urlencoded', \
@@ -173,7 +217,6 @@ class BasePlugin:
             'Credentials': 'nQv6CqtxJuXWP74xf3CJwUEP:1zDHx6un4cDjybLENN3kyfumX2kEYigWPcQpdvDRpIBk7rOJ', \
             'User-Agent': 'okhttp/2.60'
         }
-        url = '/gcdm/oauth/authenticate'
         self.httpConnAuth.Send({'Verb': 'POST', 'URL': url, 'Headers': headers, 'Data': data})
 
     def Ask_vehicle_status(self):
@@ -185,6 +228,7 @@ class BasePlugin:
         }
         url = '/webapi/v1/user/vehicles/'+ Parameters['Mode4'] +'/status'
         self.httpConnApi.Send({'Verb': 'GET', 'URL': url, 'Headers': headers})
+
 
 global _plugin
 _plugin = BasePlugin()
