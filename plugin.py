@@ -68,7 +68,6 @@ class BasePlugin:
         self.token_expiration = None
         self.oauth_token = None
         self.errorLevel = 0
-        self.expected_response_code = None
         self.runAgain = _MINUTE
         return
 
@@ -120,12 +119,9 @@ class BasePlugin:
 
     def onMessage(self, Connection, Data):
         Domoticz.Debug("onMessage called ("+Connection.Name+")")
-        if Connection.Name == 'BmwAuth':
-            if int(Data['Status']) == self.expected_response_code:
-                if Parameters['Mode3'] == 'Legacy':
-                    result_json = json.loads(Data['Data'])
-                else:
-                    result_json = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(Data['Headers']['Location']).fragment))
+        if int(Data['Status']) == 200:
+            result_json = json.loads(Data['Data'])
+            if Connection.Name == 'BmwAuth':
                 self.oauth_token = result_json['access_token']
                 expiration_time = int(result_json['expires_in'])
                 self.token_expiration = datetime.datetime.now() + datetime.timedelta(seconds=expiration_time)
@@ -133,16 +129,12 @@ class BasePlugin:
                 self.httpConnAuth.Disconnect()
                 self.httpConnApi = Domoticz.Connection(Name="BmwApi", Transport="TCP/IP", Protocol="HTTPS", Address='b2vapi.bmwgroup.com', Port='443')
                 self.httpConnApi.Connect()
-            else:
-                self.errorLevel += 1
-        if Connection.Name == 'BmwApi':
-            if int(Data['Status']) == 200:
-                result_json = json.loads(Data['Data'])
+            if Connection.Name == 'BmwApi':
                 Domoticz.Debug(str(result_json['vehicleStatus']['mileage']))
                 UpdateDevice(_UNIT_MILEAGE, result_json['vehicleStatus']['mileage'], result_json['vehicleStatus']['mileage'], Images[_IMAGE].ID)
                 self.errorLevel = 0
-            else:
-                self.errorLevel += 1
+        else:
+            self.errorLevel += 1
 
     def onCommand(self, Unit, Command, Level, Hue):
         Domoticz.Debug("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
@@ -185,38 +177,24 @@ class BasePlugin:
 
     def Get_oauth_token(self):
         Domoticz.Debug("API Mode used: "+Parameters['Mode3'])
-        if Parameters['Mode3'] == 'Legacy':
-            values = {
-                'scope': 'authenticate_user vehicle_data remote_services', \
-                'username': Parameters['Mode1'], \
-                'password': Parameters['Mode2'], \
-                'grant_type': 'password'
-            }
-            url = '/gcdm/oauth/token'
-            self.expected_response_code = 200
-        else:
-            values = {
-                'scope': 'authenticate_user vehicle_data remote_services', \
-                'username': Parameters['Mode1'], \
-                'password': Parameters['Mode2'], \
-                'client_id': 'dbf0a542-ebd1-4ff0-a9a7-55172fbfce35', \
-                'response_type': 'token', \
-                'redirect_uri': 'https://www.bmw-connecteddrive.com/app/static/external-dispatch.html'
-            }
-            url = '/gcdm/oauth/authenticate'
-            self.expected_response_code = 302
-
+        values = {
+            'scope': 'authenticate_user vehicle_data remote_services', \
+            'username': Parameters['Mode1'], \
+            'password': Parameters['Mode2'], \
+            'grant_type': 'password'
+        }
         data = urllib.parse.urlencode(values)
         headers = {
             'Content-Type': 'application/x-www-form-urlencoded', \
             'Content-Length': "%d" % (len(data)), \
             'Connection': 'Keep-Alive', \
-            'Host': 'b2vapi.bmwgroup.com', \
-            'Accept-Encoding': 'gzip', \
-            'Authorization': 'Basic blF2NkNxdHhKdVhXUDc0eGYzQ0p3VUVQOjF6REh4NnVuNGNEanliTEVOTjNreWZ1bVgya0VZaWdXUGNRcGR2RFJwSUJrN3JPSg==', \
+            'Host': 'customer.bmwgroup.com', \
+            'Accept-Encoding': 'json', \
+            'Authorization': 'Basic ZDc2NmI1MzctYTY1NC00Y2JkLWEzZGMtMGNhNTY3MmQ3ZjhkOjE1ZjY5N2Y2LWE1ZDUtNGNhZC05OWQ5LTNhMTViYzdmMzk3Mw==', \
             'Credentials': 'nQv6CqtxJuXWP74xf3CJwUEP:1zDHx6un4cDjybLENN3kyfumX2kEYigWPcQpdvDRpIBk7rOJ', \
-            'User-Agent': 'okhttp/2.60'
+            'User-Agent': 'okhttp/3.12.2'
         }
+        url = '/gcdm/oauth/token'
         self.httpConnAuth.Send({'Verb': 'POST', 'URL': url, 'Headers': headers, 'Data': data})
 
     def Ask_vehicle_status(self):
