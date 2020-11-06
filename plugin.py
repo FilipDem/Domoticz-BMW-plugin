@@ -43,6 +43,12 @@ import json
 
 #DEVICES TO CREATE
 _UNIT_MILEAGE = 1
+_UNIT_DOORS = 2
+_UNIT_WINDOWS = 3
+_UNIT_REMAIN_RANGE_FUEL = 4
+_UNIT_REMAIN_RANGE_ELEC = 5
+_UNIT_CHARGING = 6
+_UNIT_CHARGING_REMAINING = 7
 
 #DEFAULT IMAGE
 _IMAGE = "Bmw"
@@ -56,6 +62,10 @@ _TIMEDOUT = 1
 #DEBUG
 _DEBUG_OFF = 0
 _DEBUG_ON = 1
+
+#BMW Information
+LIDS = ['doorDriverFront', 'doorPassengerFront', 'doorDriverRear', 'doorPassengerRear', 'hood', 'trunk']
+WINDOWS = ['windowDriverFront', 'windowPassengerFront', 'windowDriverRear', 'windowPassengerRear', 'rearWindow', 'sunroof']
 
 ################################################################################
 # Start Plugin
@@ -130,8 +140,34 @@ class BasePlugin:
                 self.httpConnApi = Domoticz.Connection(Name="BmwApi", Transport="TCP/IP", Protocol="HTTPS", Address='b2vapi.bmwgroup.com', Port='443')
                 self.httpConnApi.Connect()
             if Connection.Name == 'BmwApi':
-                Domoticz.Debug(str(result_json['vehicleStatus']['mileage']))
+                # Doors
+                Status = 0
+                for door in LIDS:
+                    if result_json['vehicleStatus'][door] not in ['CLOSED', 'INVALID']:
+                        Status = 1
+                UpdateDevice(_UNIT_DOORS, Status, 0, Images[_IMAGE].ID)
+                # Windows
+                Status = 0
+                for window in WINDOWS:
+                    if result_json['vehicleStatus'][window] not in ['CLOSED', 'INVALID']:
+                        Status = 1
+                UpdateDevice(_UNIT_WINDOWS, Status, 0, Images[_IMAGE].ID)
+                # Milage
                 UpdateDevice(_UNIT_MILEAGE, result_json['vehicleStatus']['mileage'], result_json['vehicleStatus']['mileage'], Images[_IMAGE].ID)
+                # Remaining milage
+                if 'remainingRangeFuel' in result_json['vehicleStatus']:
+                    UpdateDevice(_UNIT_REMAIN_RANGE_FUEL, result_json['vehicleStatus']['remainingRangeFuel'], result_json['vehicleStatus']['remainingRangeFuel'], Images[_IMAGE].ID)
+                if 'remainingRangeElectric' in result_json['vehicleStatus']:
+                    UpdateDevice(_UNIT_REMAIN_RANGE_ELEC, result_json['vehicleStatus']['remainingRangeElectric'], result_json['vehicleStatus']['remainingRangeElectric'], Images[_IMAGE].ID)
+                # Electric charging
+                if 'chargingStatus' in result_json['vehicleStatus']:
+                    if result_json['vehicleStatus']['chargingStatus'] == 'CHARGING':
+                        UpdateDevice(_UNIT_CHARGING, 1, 1, Images[_IMAGE].ID)
+                    else:
+                        UpdateDevice(_UNIT_CHARGING, 0, 0, Images[_IMAGE].ID)
+                if 'chargingTimeRemaining' in result_json['vehicleStatus']:
+                    UpdateDevice(_UNIT_CHARGING_REMAINING, result_json['vehicleStatus']['chargingTimeRemaining'], result_json['vehicleStatus']['chargingTimeRemaining'], Images[_IMAGE].ID)
+                # All went well...
                 self.errorLevel = 0
         else:
             self.errorLevel += 1
@@ -285,7 +321,18 @@ def CreateDevicesUsed():
 
 #CREATE ALL THE DEVICES (NOT USED)
 def CreateDevicesNotUsed():
-    pass
+    if (_UNIT_DOORS not in Devices):
+        Domoticz.Device(Unit=_UNIT_DOORS, Name="Doors", Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
+    if (_UNIT_WINDOWS not in Devices):
+        Domoticz.Device(Unit=_UNIT_WINDOWS, Name="Windows", Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
+    if (_UNIT_REMAIN_RANGE_FUEL not in Devices):
+        Domoticz.Device(Unit=_UNIT_REMAIN_RANGE_FUEL, Name="Remain mileage (fuel)", TypeName="Custom", Options={"Custom": "0;km"}, Image=Images[_IMAGE].ID, Used=0).Create()
+    if (_UNIT_REMAIN_RANGE_ELEC not in Devices):
+        Domoticz.Device(Unit=_UNIT_REMAIN_RANGE_ELEC, Name="Remain mileage (elec)", TypeName="Custom", Options={"Custom": "0;km"}, Image=Images[_IMAGE].ID, Used=0).Create()
+    if (_UNIT_CHARGING not in Devices):
+        Domoticz.Device(Unit=_UNIT_CHARGING, Name="Charging", Type=244, Subtype=73, Switchtype=0, Image=Images[_IMAGE].ID, Used=0).Create()
+    if (_UNIT_CHARGING_REMAINING not in Devices):
+        Domoticz.Device(Unit=_UNIT_CHARGING_REMAINING, Name="Charging time", TypeName="Custom", Options={"Custom": "0;min"}, Image=Images[_IMAGE].ID, Used=0).Create()
 
 #GET CPU TEMPERATURE
 def getCPUtemperature():
