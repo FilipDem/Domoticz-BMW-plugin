@@ -49,6 +49,7 @@ _UNIT_REMAIN_RANGE_FUEL = 4
 _UNIT_REMAIN_RANGE_ELEC = 5
 _UNIT_CHARGING = 6
 _UNIT_CHARGING_REMAINING = 7
+_UNIT_BAT_LEVEL = 8
 
 #DEFAULT IMAGE
 _IMAGE = "Bmw"
@@ -167,6 +168,8 @@ class BasePlugin:
                         UpdateDevice(_UNIT_CHARGING, 0, 0, Images[_IMAGE].ID)
                 if 'chargingTimeRemaining' in result_json['vehicleStatus']:
                     UpdateDevice(_UNIT_CHARGING_REMAINING, result_json['vehicleStatus']['chargingTimeRemaining'], result_json['vehicleStatus']['chargingTimeRemaining'], Images[_IMAGE].ID)
+                if 'ChargingLevelHv' in result_json['vehicleStatus']:
+                    UpdateDevice(_UNIT_BAT_LEVEL, result_json['vehicleStatus']['ChargingLevelHv'], result_json['vehicleStatus']['ChargingLevelHv'], Images[_IMAGE].ID)
                 # All went well...
                 self.errorLevel = 0
         else:
@@ -333,6 +336,8 @@ def CreateDevicesNotUsed():
         Domoticz.Device(Unit=_UNIT_CHARGING, Name="Charging", Type=244, Subtype=73, Switchtype=0, Image=Images[_IMAGE].ID, Used=0).Create()
     if (_UNIT_CHARGING_REMAINING not in Devices):
         Domoticz.Device(Unit=_UNIT_CHARGING_REMAINING, Name="Charging time", TypeName="Custom", Options={"Custom": "0;min"}, Image=Images[_IMAGE].ID, Used=0).Create()
+    if (_UNIT_BAT_LEVEL not in Devices):
+        Domoticz.Device(Unit=_UNIT_BAT_LEVEL, Name="Battery Level", TypeName="Custom", Options={"Custom": "0;%"}, Image=Images[_IMAGE].ID, Used=0).Create()
 
 #GET CPU TEMPERATURE
 def getCPUtemperature():
