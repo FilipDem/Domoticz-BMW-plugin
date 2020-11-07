@@ -11,6 +11,7 @@ Domoticz plugin working with BMW Connected Drive. Currently it supports the keep
 * In case of electric support:
     * Charging status
     * Remaining charging time
+    * Battery level
 
 If there are requests to integrate other information/functions, please leave a message.
 
