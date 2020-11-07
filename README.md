@@ -4,7 +4,13 @@ It took me quite some effort to get the plugin available. Small contributions ar
 [![](https://www.paypalobjects.com/en_US/BE/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=AT4L7ST55JR4A)
 
 # Domoticz-BMW-plugin
-Domoticz plugin working with BMW Connected Drive. Currently it supports the keep track of the mileage, but can easily be extended with other information and even with actions or other inforamtion (eg, GPS tracking, window status, horn, ...).
+Domoticz plugin working with BMW Connected Drive. Currently it supports the keep track of the following information:
+* Mileage
+* Doors and windows: open - closed
+* Remaining mileage for fuel and electric
+* In case of electric support:
+    * Charging status
+    * Remaining charging time
 
 If there are requests to integrate other information/functions, please leave a message.
 
