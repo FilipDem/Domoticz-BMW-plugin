@@ -155,11 +155,15 @@ class BasePlugin:
                 UpdateDevice(_UNIT_WINDOWS, Status, 0, Images[_IMAGE].ID)
                 # Milage
                 UpdateDevice(_UNIT_MILEAGE, result_json['vehicleStatus']['mileage'], result_json['vehicleStatus']['mileage'], Images[_IMAGE].ID)
-                # Remaining milage
-                if 'remainingRangeFuel' in result_json['vehicleStatus']:
-                    UpdateDevice(_UNIT_REMAIN_RANGE_FUEL, result_json['vehicleStatus']['remainingRangeFuel'], result_json['vehicleStatus']['remainingRangeFuel'], Images[_IMAGE].ID)
+                # Remaining mileage (remainingRangeFuel is the total remaining mileage, including the remainingRangeElectric)
                 if 'remainingRangeElectric' in result_json['vehicleStatus']:
-                    UpdateDevice(_UNIT_REMAIN_RANGE_ELEC, result_json['vehicleStatus']['remainingRangeElectric'], result_json['vehicleStatus']['remainingRangeElectric'], Images[_IMAGE].ID)
+                    remainingRangeElectric = result_json['vehicleStatus']['remainingRangeElectric']
+                    UpdateDevice(_UNIT_REMAIN_RANGE_ELEC, remainingRangeElectric, remainingRangeElectric, Images[_IMAGE].ID)
+                else:
+                    remainingRangeElectric = 0
+                if 'remainingRangeFuel' in result_json['vehicleStatus']:
+                    remainingRangeFuel = result_json['vehicleStatus']['remainingRangeFuel'] - remainingRangeElectric
+                    UpdateDevice(_UNIT_REMAIN_RANGE_FUEL, remainingRangeFuel, remainingRangeFuel, Images[_IMAGE].ID)
                 # Electric charging
                 if 'chargingStatus' in result_json['vehicleStatus']:
                     if result_json['vehicleStatus']['chargingStatus'] == 'CHARGING':
@@ -325,6 +329,7 @@ def CreateDevicesUsed():
 #CREATE ALL THE DEVICES (NOT USED)
 def CreateDevicesNotUsed():
     if (_UNIT_DOORS not in Devices):
+        
         Domoticz.Device(Unit=_UNIT_DOORS, Name="Doors", Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
     if (_UNIT_WINDOWS not in Devices):
         Domoticz.Device(Unit=_UNIT_WINDOWS, Name="Windows", Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
