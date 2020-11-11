@@ -144,16 +144,18 @@ class BasePlugin:
                 # Doors
                 Status = 0
                 for door in LIDS:
-                    if result_json['vehicleStatus'][door] not in ['CLOSED', 'INVALID']:
-                        Status = 1
+                    if door in result_json['vehicleStatus']:
+                        if result_json['vehicleStatus'][door] not in ['CLOSED', 'INVALID']:
+                            Status = 1
                 UpdateDevice(_UNIT_DOORS, Status, 0, Images[_IMAGE].ID)
                 # Windows
                 Status = 0
                 for window in WINDOWS:
-                    if result_json['vehicleStatus'][window] not in ['CLOSED', 'INVALID']:
-                        Status = 1
+                    if window in result_json['vehicleStatus']:
+                        if result_json['vehicleStatus'][window] not in ['CLOSED', 'INVALID']:
+                            Status = 1
                 UpdateDevice(_UNIT_WINDOWS, Status, 0, Images[_IMAGE].ID)
-                # Milage
+                # Mileage
                 UpdateDevice(_UNIT_MILEAGE, result_json['vehicleStatus']['mileage'], result_json['vehicleStatus']['mileage'], Images[_IMAGE].ID)
                 # Remaining mileage (remainingRangeFuel is the total remaining mileage, including the remainingRangeElectric)
                 if 'remainingRangeElectric' in result_json['vehicleStatus']:
