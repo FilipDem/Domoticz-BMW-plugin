@@ -174,8 +174,8 @@ class BasePlugin:
                         UpdateDevice(_UNIT_CHARGING, 0, 0, Images[_IMAGE].ID)
                 if 'chargingTimeRemaining' in result_json['vehicleStatus']:
                     UpdateDevice(_UNIT_CHARGING_REMAINING, result_json['vehicleStatus']['chargingTimeRemaining'], result_json['vehicleStatus']['chargingTimeRemaining'], Images[_IMAGE].ID)
-                if 'ChargingLevelHv' in result_json['vehicleStatus']:
-                    UpdateDevice(_UNIT_BAT_LEVEL, result_json['vehicleStatus']['ChargingLevelHv'], result_json['vehicleStatus']['ChargingLevelHv'], Images[_IMAGE].ID)
+                if 'chargingLevelHv' in result_json['vehicleStatus']:
+                    UpdateDevice(_UNIT_BAT_LEVEL, result_json['vehicleStatus']['chargingLevelHv'], result_json['vehicleStatus']['chargingLevelHv'], Images[_IMAGE].ID)
                 # All went well...
                 self.errorLevel = 0
         else:
