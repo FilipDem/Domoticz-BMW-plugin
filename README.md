@@ -6,8 +6,9 @@ It took me quite some effort to get the plugin available. Small contributions ar
 # Domoticz-BMW-plugin
 Domoticz plugin working with BMW Connected Drive. Currently it supports the keep track of the following information:
 * Mileage
-* Doors and windows: open - closed
+* Doors, windows and car: open - closed
 * Remaining mileage for fuel and electric
+* Remote services: flash light, horn, activate airco/heating
 * In case of electric support:
     * Charging status
     * Remaining charging time
@@ -16,6 +17,8 @@ Domoticz plugin working with BMW Connected Drive. Currently it supports the keep
 If there are requests to integrate other information/functions, please leave a message.
 
 Currently the plugin does not support BMW Connected Drive cars in China and USA.
+
+Hint: you can use the remote services in combination with a script that looks to the Google Calendar... In this way it is possible to plan the start of the airco/heating.
 
 ## Installation (linux)
 Follow this procedure to install the plugin.
