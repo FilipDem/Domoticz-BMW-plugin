@@ -6,10 +6,10 @@
 # Author: Filip Demaertelaere
 #
 # Plugin to get data of the BMW.
-# Implemenation based on https://github.com/bimmerconnected/bimmer_connected
+# Implemenation based on https://github.com/bimmerconnected/bimmer_connected, https://github.com/edent/BMW-i-Remote
 #
 """
-<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="1.0.0">
+<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="1.1.0">
     <params>
         <param field="Mode1" label="Username" width="200px" required="true" default=""/>
         <param field="Mode2" label="Password" width="200px" required="true" default="" password="true"/>
@@ -50,6 +50,8 @@ _UNIT_REMAIN_RANGE_ELEC = 5
 _UNIT_CHARGING = 6
 _UNIT_CHARGING_REMAINING = 7
 _UNIT_BAT_LEVEL = 8
+_UNIT_REMOTE_SERVICES = 9
+_UNIT_CAR = 10
 
 #DEFAULT IMAGE
 _IMAGE = "Bmw"
@@ -64,9 +66,19 @@ _TIMEDOUT = 1
 _DEBUG_OFF = 0
 _DEBUG_ON = 1
 
+#STATES
+_GET_STATUS = 0
+_REMOTE_SERVICE = 1
+
 #BMW Information
 LIDS = ['doorDriverFront', 'doorPassengerFront', 'doorDriverRear', 'doorPassengerRear', 'hood', 'trunk']
 WINDOWS = ['windowDriverFront', 'windowPassengerFront', 'windowDriverRear', 'windowPassengerRear', 'rearWindow', 'sunroof']
+REMOTE_LIGHT_FLASH = 'LIGHT_FLASH'
+REMOTE_VEHICLE_FINDER = 'VEHICLE_FINDER'
+REMOTE_DOOR_LOCK = 'DOOR_LOCK'
+REMOTE_DOOR_UNLOCK = 'DOOR_UNLOCK'
+REMOTE_HORN = 'HORN_BLOW'
+REMOTE_AIR_CONDITIONING = 'CLIMATE_NOW'
 
 ################################################################################
 # Start Plugin
@@ -80,6 +92,8 @@ class BasePlugin:
         self.oauth_token = None
         self.errorLevel = 0
         self.runAgain = _MINUTE
+        self.state = _GET_STATUS
+        self.remote_service = REMOTE_LIGHT_FLASH
         return
 
     def onStart(self):
@@ -104,6 +118,7 @@ class BasePlugin:
 
         # Set all devices as timed out
         TimeoutDevice(All=True)
+        UpdateDevice(_UNIT_REMOTE_SERVICES, Devices[_UNIT_REMOTE_SERVICES].nValue, Devices[_UNIT_REMOTE_SERVICES].sValue, Images[_IMAGE].ID, TimedOut=0)
 
         # Connection parameters
         if Parameters['Mode3'] == 'Legacy':
@@ -124,7 +139,10 @@ class BasePlugin:
             if Connection.Name == 'BmwAuth':
                 self.Get_oauth_token()
             if Connection.Name == 'BmwApi':
-                self.Ask_vehicle_status()
+                if self.state == _GET_STATUS:
+                    self.Ask_vehicle_status()
+                elif self.state == _REMOTE_SERVICE:
+                    self.Exec_remote_service(self.remote_service)
         else:
             self.errorLevel += 1
 
@@ -140,7 +158,9 @@ class BasePlugin:
                 self.httpConnAuth.Disconnect()
                 self.httpConnApi = Domoticz.Connection(Name="BmwApi", Transport="TCP/IP", Protocol="HTTPS", Address='b2vapi.bmwgroup.com', Port='443')
                 self.httpConnApi.Connect()
-            if Connection.Name == 'BmwApi':
+            if Connection.Name == 'BmwApi' and self.state == _GET_STATUS:
+                # Switch for remote services
+                UpdateDevice(_UNIT_REMOTE_SERVICES, Devices[_UNIT_REMOTE_SERVICES].nValue, Devices[_UNIT_REMOTE_SERVICES].sValue, Images[_IMAGE].ID, TimedOut=0)
                 # Doors
                 Status = 0
                 for door in LIDS:
@@ -155,6 +175,11 @@ class BasePlugin:
                         if result_json['vehicleStatus'][window] not in ['CLOSED', 'INVALID']:
                             Status = 1
                 UpdateDevice(_UNIT_WINDOWS, Status, 0, Images[_IMAGE].ID)
+                # Car
+                if result_json['vehicleStatus']['doorLockState'] == 'LOCKED':
+                    UpdateDevice(_UNIT_CAR, 0, 0, Images[_IMAGE].ID)            
+                else:
+                    UpdateDevice(_UNIT_CAR, 1, 0, Images[_IMAGE].ID)            
                 # Mileage
                 UpdateDevice(_UNIT_MILEAGE, result_json['vehicleStatus']['mileage'], result_json['vehicleStatus']['mileage'], Images[_IMAGE].ID)
                 # Remaining mileage (remainingRangeFuel is the total remaining mileage, including the remainingRangeElectric)
@@ -178,12 +203,29 @@ class BasePlugin:
                     UpdateDevice(_UNIT_BAT_LEVEL, result_json['vehicleStatus']['chargingLevelHv'], result_json['vehicleStatus']['chargingLevelHv'], Images[_IMAGE].ID)
                 # All went well...
                 self.errorLevel = 0
+            if Connection.Name == 'BmwApi' and self.state == _REMOTE_SERVICE:
+                if result_json['executionStatus']['status'] == 'INITIATED' and result_json['executionStatus']['serviceType'] == self.remote_service:
+                    Domoticz.Debug("Remote Service " + self.remote_service + " initiated!")
+                self.state = _GET_STATUS
         else:
             self.errorLevel += 1
 
     def onCommand(self, Unit, Command, Level, Hue):
         Domoticz.Debug("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
-
+        if Unit == _UNIT_REMOTE_SERVICES and Command == 'Set Level':
+            if Level == 10:
+                self.remote_service = REMOTE_LIGHT_FLASH
+            elif Level == 20:
+                self.remote_service = REMOTE_HORN
+            elif Level == 30:
+                self.remote_service = REMOTE_AIR_CONDITIONING
+            self.state = _REMOTE_SERVICE
+            if self.httpConnApi.Connected():
+                self.Exec_remote_service(self.remote_service)
+            else:
+                self.httpConnApi = Domoticz.Connection(Name="BmwApi", Transport="TCP/IP", Protocol="HTTPS", Address='b2vapi.bmwgroup.com', Port='443')
+                self.httpConnApi.Connect()
+                
     def onNotification(self, Name, Subject, Text, Status, Priority, Sound, ImageFile):
         Domoticz.Debug("Notification: " + Name + "," + Subject + "," + Text + "," + Status + "," + str(Priority) + "," + Sound + "," + ImageFile)
 
@@ -204,7 +246,8 @@ class BasePlugin:
                     self.httpConnAuth.Connect()
             else:
                 if self.httpConnApi.Connected():
-                    self.Ask_vehicle_status()
+                    if self.state == _GET_STATUS:
+                        self.Ask_vehicle_status()
                 else:
                     self.httpConnApi = Domoticz.Connection(Name="BmwApi", Transport="TCP/IP", Protocol="HTTPS", Address='b2vapi.bmwgroup.com', Port='443')
                     self.httpConnApi.Connect()
@@ -252,6 +295,35 @@ class BasePlugin:
         url = '/webapi/v1/user/vehicles/'+ Parameters['Mode4'] +'/status'
         self.httpConnApi.Send({'Verb': 'GET', 'URL': url, 'Headers': headers})
 
+    def Exec_remote_service(self, service=REMOTE_HORN):
+        values = {
+            'serviceType': service
+        }
+        data = urllib.parse.urlencode(values)
+        headers = {
+            'accept': 'application/json', \
+            'Content-Length': "%d" % (len(data)), \
+            'Connection': 'Keep-Alive', \
+            'Accept-Encoding': 'gzip, deflate', \
+            'Content-Type': 'application/x-www-form-urlencoded', \
+            'Authorization': 'Bearer {}'.format(self.oauth_token), \
+            'Host': 'b2vapi.bmwgroup.com', \
+            'referer': 'https://www.bmw-connecteddrive.de/app/index.html', \
+            'User-Agent': 'okhttp/3.12.2'
+        }
+        url = '/webapi/v1/user/vehicles/'+ Parameters['Mode4'] + '/executeService'
+        self.httpConnApi.Send({'Verb': 'POST', 'URL': url, 'Headers': headers, 'Data': data})
+
+    def Get_remote_service_status(self, service=REMOTE_HORN):
+        headers = {
+            'accept': 'application/json', \
+            'Content-Type': 'application/json', \
+            'Authorization': 'Bearer {}'.format(self.oauth_token), \
+            'Host': 'b2vapi.bmwgroup.com', \
+            'referer': 'https://www.bmw-connecteddrive.de/app/index.html'
+        }
+        url = '/webapi/v1/user/vehicles/'+ Parameters['Mode4'] + '/serviceExecutionStatus?serviceType=' + service
+        self.httpConnApi.Send({'Verb': 'GET', 'URL': url, 'Headers': headers})
 
 global _plugin
 _plugin = BasePlugin()
@@ -327,11 +399,12 @@ def TimeoutDevice(All, Unit=0):
 def CreateDevicesUsed():
     if (_UNIT_MILEAGE not in Devices):
         Domoticz.Device(Unit=_UNIT_MILEAGE, Name="Mileage", TypeName="Custom", Options={"Custom": "0;km"}, Image=Images[_IMAGE].ID, Used=1).Create()
+    if (_UNIT_REMOTE_SERVICES not in Devices):
+        Domoticz.Device(Unit=_UNIT_REMOTE_SERVICES, Name="Remote Services", TypeName="Selector Switch", Options={"LevelActions": "||||", "LevelNames": "|" + REMOTE_LIGHT_FLASH + "|" + REMOTE_HORN + "|" + REMOTE_AIR_CONDITIONING, "LevelOffHidden": "true", "SelectorStyle": "0"}, Image=Images[_IMAGE].ID, Used=1).Create()
 
 #CREATE ALL THE DEVICES (NOT USED)
 def CreateDevicesNotUsed():
     if (_UNIT_DOORS not in Devices):
-        
         Domoticz.Device(Unit=_UNIT_DOORS, Name="Doors", Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
     if (_UNIT_WINDOWS not in Devices):
         Domoticz.Device(Unit=_UNIT_WINDOWS, Name="Windows", Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
@@ -345,6 +418,8 @@ def CreateDevicesNotUsed():
         Domoticz.Device(Unit=_UNIT_CHARGING_REMAINING, Name="Charging time", TypeName="Custom", Options={"Custom": "0;min"}, Image=Images[_IMAGE].ID, Used=0).Create()
     if (_UNIT_BAT_LEVEL not in Devices):
         Domoticz.Device(Unit=_UNIT_BAT_LEVEL, Name="Battery Level", TypeName="Custom", Options={"Custom": "0;%"}, Image=Images[_IMAGE].ID, Used=0).Create()
+    if (_UNIT_CAR not in Devices):
+        Domoticz.Device(Unit=_UNIT_CAR, Name="Car", Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
 
 #GET CPU TEMPERATURE
 def getCPUtemperature():
