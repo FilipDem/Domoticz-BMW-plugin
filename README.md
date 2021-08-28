@@ -11,11 +11,13 @@ The QR codes comply the EPC069-12 European Standard for SEPA Credit Transfers ([
 [![](https://www.paypalobjects.com/en_US/BE/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=AT4L7ST55JR4A) 
 
 # Domoticz-BMW-plugin
-Domoticz plugin working with BMW Connected Drive. Currently it supports the keep track of the following information:
+Domoticz plugin working with BMW Connected Drive. A big changes is introduced since version 2.0.0 of the plugin. BMW discontinued the BMW Connected Drive App and related services. From plugin 2.0.0, the new services based on the MyBMW app are integrated.
+
+Currently it supports the keep track of the following information:
 * Mileage
 * Doors, windows and car: open - closed
 * Remaining mileage for fuel and electric
-* Remote services: flash light, horn, activate airco/heating
+* Remote services: flash light, horn, activate airco/heating, lock/unlock car (in case you installed a previous version without all these remote services, delete first the device in Domoticz, it will be recreated with all features afterwards)
 * In case of electric support:
     * Charging status
     * Remaining charging time
