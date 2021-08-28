@@ -27,6 +27,8 @@ If there are requests to integrate other information/functions, please leave a m
 
 Currently the plugin does not support BMW Connected Drive cars in China and USA.
 
+Remark that using remote services heavily is blocked by BMW. They give a dedicated message back in that case (it will show up in the Domoticz log also). So fast executing remote service one after the other won't be successful.
+
 Hint: you can use the remote services in combination with a script that looks to the Google Calendar... In this way it is possible to plan the start of the airco/heating.
 
 ## Installation (linux)
