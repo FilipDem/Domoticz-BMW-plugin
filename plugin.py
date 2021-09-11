@@ -9,12 +9,12 @@
 # Implemenation based on https://github.com/bimmerconnected/bimmer_connected, https://github.com/edent/BMW-i-Remote
 #
 """
-<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="2.0.0">
+<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="2.0.1">
     <params>
         <param field="Mode2" label="Username" width="200px" required="true" default=""/>
         <param field="Mode3" label="Password" width="200px" required="true" default="" password="true"/>
         <param field="Mode4" label="VIN" width="200px" required="true" default=""/>
-        <param field="Mode1" label="Answer Security Question" width="120px" required="true" default=""/>
+        <param field="Mode1" label="Answer Security Question" width="120px" required="false" default="Reserved for future"/>
         <param field="Mode5" label="Minutes between update" width="120px" required="true" default="5"/>
         <param field="Mode6" label="Debug" width="120px">
             <options>
@@ -348,6 +348,7 @@ class BasePlugin:
 
     def Get_authorization_challenge(self):
         Domoticz.Debug("Sending request to get authorization challenge.")
+        self.authorization_challenge = None
         values = {
             'client_id': AUTH_CLIENT_ID, \
             'response_type': 'code', \
