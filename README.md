@@ -1,9 +1,3 @@
-# REMARK
-This is a new version reworked due to BMW switched off some legacy APIs (due to the stop of the My Connected Drive APP).
-This works already partially (at the start of the plugin). However there is a problem noticed when credentials are expired (they are valid for some hours).
-I will work on this shortly to get it solved and make an update so that the devices are updated explicitly.
-Sorry for the inconvenience.
-
 # Donation
 It took me quite some effort to get the plugin available. Small contributions are welcome...
 
