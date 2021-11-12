@@ -11,7 +11,9 @@ The QR codes comply the EPC069-12 European Standard for SEPA Credit Transfers ([
 [![](https://www.paypalobjects.com/en_US/BE/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=AT4L7ST55JR4A) 
 
 # Domoticz-BMW-plugin
-Domoticz plugin working with BMW Connected Drive. A big changes is introduced since version 2.0.0 of the plugin. BMW discontinued the BMW Connected Drive App and related services. From plugin 2.0.0, the new services based on the MyBMW app are integrated.
+Domoticz plugin working with BMW Connected Drive. A big changes is introduced since version 2.0.0 of the plugin. BMW discontinued the BMW Connected Drive App and related services. 
+From plugin 2.0.0, the new services based on the MyBMW app are integrated. This version does not work anymore due to changes at the server side of BMW. The status of the vehicle cannot longer be retrieved.
+From plugin 3.0.0, the plugin uses bimmer_connected (https://github.com/bimmerconnected/bimmer_connected) in threading mode. It solves the problem with the vehicle status update by adding a workaround in the plugin.
 
 Currently it supports the keep track of the following information:
 * Mileage
@@ -20,18 +22,21 @@ Currently it supports the keep track of the following information:
 * Remote services: flash light, horn, activate airco/heating, lock/unlock car (in case you installed a previous version without all these remote services, delete first the device in Domoticz, it will be recreated with all features afterwards)
 * In case of electric support:
     * Charging status
-    * Remaining charging time
+    * Remaining charging time is no longer supported in the new APIs from BMW
     * Battery level
 
 If there are requests to integrate other information/functions, please leave a message.
 
-Currently the plugin does not support BMW Connected Drive cars in China and USA.
+Today, the plugin does not support BMW Connected Drive cars in China and USA.
 
 Remark that using remote services heavily is blocked by BMW. They give a dedicated message back in that case (it will show up in the Domoticz log also). So fast executing remote service one after the other won't be successful.
 
 Hint: you can use the remote services in combination with a script that looks to the Google Calendar... In this way it is possible to plan the start of the airco/heating.
 
 ## Installation (linux)
+Preliminary install bimmer_connected by with ```sudo pip3 install bimmer_connected```.
+Be sure that the python3 module ```threading``` and ```queue``` is installed (otherwise install them also as described below).
+
 Follow this procedure to install the plugin.
 * Go to "~/Domoticz/plugins" with the command ```cd ~/Domoticz/plugins```
 * Create directory "Bmw" with the command ```mkdir Bmw```
