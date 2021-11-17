@@ -14,6 +14,7 @@ The QR codes comply the EPC069-12 European Standard for SEPA Credit Transfers ([
 Domoticz plugin working with BMW Connected Drive. A big changes is introduced since version 2.0.0 of the plugin. BMW discontinued the BMW Connected Drive App and related services. 
 From plugin 2.0.0, the new services based on the MyBMW app are integrated. This version does not work anymore due to changes at the server side of BMW. The status of the vehicle cannot longer be retrieved.
 From plugin 3.0.0, the plugin uses bimmer_connected (https://github.com/bimmerconnected/bimmer_connected) in threading mode. It solves the problem with the vehicle status update by adding a workaround in the plugin.
+From plugin 3.1.0 (still working on it), all functionality is used from the bimmer_connected library without specific code as workaround. It is highly considered to follow the bimmer_connected evolutions on https://github.com/bimmerconnected/bimmer_connected as BMW is highly refactoring.
 
 Currently it supports the keep track of the following information:
 * Mileage
