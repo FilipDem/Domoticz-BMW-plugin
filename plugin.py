@@ -10,7 +10,7 @@
 # Including the threading...
 #
 """
-<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="3.0.0">
+<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="3.1.0">
     <params>
         <param field="Mode2" label="Username" width="200px" required="true" default=""/>
         <param field="Mode3" label="Password" width="200px" required="true" default="" password="true"/>
@@ -36,6 +36,7 @@
 #IMPORTS
 import sys
 major,minor,x,y,z = sys.version_info
+sys.path.append('..')
 sys.path.append('/usr/lib/python3/dist-packages')
 sys.path.append('/usr/local/lib/python{}.{}/dist-packages'.format(major, minor))
 import Domoticz
@@ -45,7 +46,7 @@ import queue
 import json
 from bimmer_connected.account import ConnectedDriveAccount
 from bimmer_connected.country_selector import get_region_from_name
-from bimmer_connected.remote_services import RemoteServices, ExecutionState
+from bimmer_connected.remote_services import ExecutionState
 
 #DEVICES TO CREATE
 _UNIT_MILEAGE = 1
@@ -95,7 +96,6 @@ class BasePlugin:
         self.myBMW = None
         self.region = REGIONS[0]
         self.myVehicle = None
-        self.myVehicleLocation = ''
         self.last_car_opened_time = datetime.datetime.now()
         self.car_opened_status_given = False
         self.tasksQueue = queue.Queue()
@@ -190,7 +190,7 @@ class BasePlugin:
 
             # Check if car is locked
             if int(Devices[_UNIT_CAR].nValue) and not self.car_opened_status_given and datetime.datetime.now()-self.last_car_opened_time>datetime.timedelta(seconds=60):
-                Domoticz.Status('ATTTENTION: Car is not closed (location: {})!!'.format(self.myVehicleLocation))
+                Domoticz.Status('ATTTENTION: Car is not closed!!')
                 self.car_opened_status_given = True
 
             if self.myBMW == None:
@@ -228,22 +228,30 @@ class BasePlugin:
                         self.errorLevel += 1
                     else:
                         self.myVehicle = self.myBMW.get_vehicle(Parameters['Mode4'])
-                        if self.myVehicle == None:
+                        if self.myVehicle:
+                            Domoticz.Debug('Car {} found!'.format(self.myVehicle.name))
+                            self.updateVehicleStatus()
+                        else:
                             Domoticz.Error('vin {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
                             TimeoutDevice(True)
 
                 elif task['Action'] == 'StatusUpdate':
                     if self.myBMW and self.myVehicle:
-                        import time
-                        utcdiff = round((datetime.datetime.now() - datetime.datetime.utcnow()).seconds / 60, 0)
                         try:
-                            Response = self.myBMW.send_request_v2('https://cocoapi.bmwgroup.com/eadrax-vcs/v1/vehicles', params={'apptimezone': utcdiff, 'appDateTime': time.time(), 'tireGuardMode': 'ENABLED'})
-                            if Response.status_code == 200:
-                                self.updateCarStatus(Response.text)
-                            else:
-                                self.errorLevel += 1
+                            self.myBMW.update_vehicle_states()
                         except:
+                            if not self.errorLevel:
+                                Domoticz.Status('Error occured in getting the status update of the BMW.')
                             self.errorLevel += 1
+                        else:
+                            self.myVehicle = self.myBMW.get_vehicle(Parameters['Mode4'])
+                            if self.myVehicle:
+                                Domoticz.Debug('Car {} found after update!'.format(self.myVehicle.name))
+                                self.updateVehicleStatus()
+                            else:
+                                if not self.errorLevel:
+                                    Domoticz.Status('BMW with VIN {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
+                                self.errorLevel += 1
                             
                 elif task['Action'] in [REMOTE_LIGHT_FLASH, REMOTE_DOOR_LOCK, REMOTE_DOOR_UNLOCK, REMOTE_HORN, REMOTE_AIR_CONDITIONING]:
                     if self.myVehicle:
@@ -263,7 +271,7 @@ class BasePlugin:
                         except:
                             Domoticz.Error('Error executing remote service {} for {} (unknown error).'.format(task['Action'], Parameters['Mode4']))
                     else:
-                        Domoticz.Error('vin {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
+                        Domoticz.Error('BMW with VIN {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
                     UpdateDevice(_UNIT_REMOTE_SERVICES, 2, 0)
     
                 else:
@@ -276,77 +284,62 @@ class BasePlugin:
             self.tasksQueue.task_done()
             Domoticz.Error('General error TaskHandler: {}'.format(err))
 
-    def updateCarStatus(self, Response):
-        Domoticz.Debug(Response)
-        VehiculesStatus = json.loads(Response)
-        vinFound = False
-        for VehiculeStatus in VehiculesStatus:
-            if VehiculeStatus['vin'] == Parameters['Mode4']:
-                vinFound = True
-        
-                # Update status Doors
-                if VehiculesStatus[0]['properties']['areDoorsClosed']:
-                    UpdateDevice(_UNIT_DOORS, 0, 0)
-                else:
-                    UpdateDevice(_UNIT_DOORS, 1, 0)
+    def updateVehicleStatus(self):
+
+        # Update status Doors
+        if self.myVehicle.status.all_lids_closed:
+            UpdateDevice(_UNIT_DOORS, 0, 0)
+        else:
+            UpdateDevice(_UNIT_DOORS, 1, 0)
     
-                # Update status Windows
-                if VehiculesStatus[0]['properties']['areWindowsClosed']:
-                    UpdateDevice(_UNIT_WINDOWS, 0, 0)
-                else:
-                    UpdateDevice(_UNIT_WINDOWS, 1, 0)
+        # Update status Windows
+        if self.myVehicle.status.all_windows_closed:
+            UpdateDevice(_UNIT_WINDOWS, 0, 0)
+        else:
+            UpdateDevice(_UNIT_WINDOWS, 1, 0)
 
-                # Update status Locked
-                if VehiculesStatus[0]['properties']['areDoorsLocked']:
-                    UpdateDevice(_UNIT_CAR, 0, 0)
-                else:
-                    if UpdateDevice(_UNIT_CAR, 1, 0):
-                        Domoticz.Debug("Car is opened now!")
-                        self.last_car_opened_time = datetime.datetime.now()
-                        self.car_opened_status_given = False
+        # Update status Locked
+        if self.myVehicle.status.door_lock_state == 'LOCKED':
+            UpdateDevice(_UNIT_CAR, 0, 0)
+        else:
+            if UpdateDevice(_UNIT_CAR, 1, 0):
+                Domoticz.Debug("Car is opened now!")
+                self.last_car_opened_time = datetime.datetime.now()
+                self.car_opened_status_given = False
 
-                # Update Mileage
-                Domoticz.Debug('Units ({}) are not yet updated on device but hardcoded.'.format(VehiculesStatus[0]['status']['currentMileage']['units']))
-                UpdateDevice(_UNIT_MILEAGE, VehiculesStatus[0]['status']['currentMileage']['mileage'], VehiculesStatus[0]['status']['currentMileage']['mileage'])
-                UpdateDevice(_UNIT_MILEAGE_COUNTER, 0, VehiculesStatus[0]['status']['currentMileage']['mileage'])
+        # Update Mileage
+        Domoticz.Debug('Units ({}) are not yet updated on device but hardcoded.'.format(self.myVehicle.status.mileage[1]))
+        UpdateDevice(_UNIT_MILEAGE, self.myVehicle.status.mileage[0], self.myVehicle.status.mileage[0])
+        UpdateDevice(_UNIT_MILEAGE_COUNTER, 0, self.myVehicle.status.mileage[0])
 
-                # Update Remaining mileage
-                RemainingCombined = RemainingCombustion = RemainingElectric = None
-                if 'combinedRange' in VehiculesStatus[0]['properties']:
-                    RemainingCombined = VehiculesStatus[0]['properties']['combinedRange']['distance']['value']
-                if 'combustionRange' in VehiculesStatus[0]['properties']:
-                    RemainingCombustion = VehiculesStatus[0]['properties']['combustionRange']['distance']['value']
-                if 'electricRange' in VehiculesStatus[0]['properties']:
-                    RemainingElectric = VehiculesStatus[0]['properties']['electricRange']['distance']['value']
-                # Seems to be a bug that the "combinedRange" equals the "combustionRange", were in the "fuelIndicators" it is correct
-                if RemainingCombustion != None and RemainingElectric != None and RemainingCombined != None:
-                    if RemainingCombined == RemainingCombustion:
-                        RemainingCombustion = RemainingCombined-RemainingElectric
-                if RemainingElectric != None:
-                    UpdateDevice(_UNIT_REMAIN_RANGE_ELEC, RemainingElectric, RemainingElectric)
-                if RemainingCombustion != None:
-                    UpdateDevice(_UNIT_REMAIN_RANGE_FUEL, RemainingCombustion, RemainingCombustion)
+        # Update Remaining mileage
+        if self.myVehicle.status.remaining_range_electric != None:
+            UpdateDevice(_UNIT_REMAIN_RANGE_ELEC, self.myVehicle.status.remaining_range_electric[0], self.myVehicle.status.remaining_range_electric[0])
+        if self.myVehicle.status.remaining_range_fuel[0] != None:
+            UpdateDevice(_UNIT_REMAIN_RANGE_FUEL, self.myVehicle.status.remaining_range_fuel[0], self.myVehicle.status.remaining_range_fuel[0])
 
-                # Update Electric charging
-                if 'chargingState' in VehiculesStatus[0]['properties']:
-                    if VehiculesStatus[0]['properties']['chargingState']['state'] == 'CHARGING':
-                        UpdateDevice(_UNIT_CHARGING, 1, 1)
-                    else:
-                        UpdateDevice(_UNIT_CHARGING, 0, 0)
-                    UpdateDevice(_UNIT_BAT_LEVEL, VehiculesStatus[0]['properties']['chargingState']['chargePercentage'], VehiculesStatus[0]['properties']['chargingState']['chargePercentage'])
+        # Update Electric charging
+        if self.myVehicle.status.charging_status != None:
+            if self.myVehicle.status.charging_status == 'CHARGING':
+                UpdateDevice(_UNIT_CHARGING, 1, 1)
+            else:
+                UpdateDevice(_UNIT_CHARGING, 0, 0)
 
-                # Get Car location
-                self.myVehicleLocation = VehiculesStatus[0]['properties']['vehicleLocation']['address']['formatted']
+        # Update Charging Percentage
+        if self.myVehicle.status.charging_level_hv != None:
+            UpdateDevice(_UNIT_BAT_LEVEL, self.myVehicle.status.charging_level_hv, self.myVehicle.status.charging_level_hv)
 
-                # Switch for remote services
-                if Devices[_UNIT_REMOTE_SERVICES].TimedOut == _TIMEDOUT:
-                    UpdateDevice(_UNIT_REMOTE_SERVICES, Devices[_UNIT_REMOTE_SERVICES].nValue, Devices[_UNIT_REMOTE_SERVICES].sValue, TimedOut=0)
+        # Update Charging Time (minutes)
+        if self.myVehicle.status.charging_time_remaining != None:
+            UpdateDevice(_UNIT_CHARGING_REMAINING, self.myVehicle.status.charging_time_remaining, self.myVehicle.status.charging_time_remaining)
 
-                # All went well...
-                self.errorLevel = 0
+        # Switch for remote services
+        if Devices[_UNIT_REMOTE_SERVICES].TimedOut == _TIMEDOUT:
+            UpdateDevice(_UNIT_REMOTE_SERVICES, Devices[_UNIT_REMOTE_SERVICES].nValue, Devices[_UNIT_REMOTE_SERVICES].sValue, TimedOut=0)
+
+        # All went well...
+        self.errorLevel = 0
                 
-        if not vinFound:
-            Domoticz.Error('vin {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
 
 global _plugin
 _plugin = BasePlugin()
