@@ -313,9 +313,9 @@ class BasePlugin:
         UpdateDevice(_UNIT_MILEAGE_COUNTER, 0, self.myVehicle.status.mileage[0])
 
         # Update Remaining mileage
-        if self.myVehicle.status.remaining_range_electric != None:
+        if self.myVehicle.status.remaining_range_electric != None and self.myVehicle.status.remaining_range_electric != (None, None):
             UpdateDevice(_UNIT_REMAIN_RANGE_ELEC, self.myVehicle.status.remaining_range_electric[0], self.myVehicle.status.remaining_range_electric[0])
-        if self.myVehicle.status.remaining_range_fuel != None:
+        if self.myVehicle.status.remaining_range_fuel != None and self.myVehicle.status.remaining_range_fuel != (None, None):
             UpdateDevice(_UNIT_REMAIN_RANGE_FUEL, self.myVehicle.status.remaining_range_fuel[0], self.myVehicle.status.remaining_range_fuel[0])
 
         # Update Electric charging
