@@ -10,7 +10,7 @@
 # Including the threading...
 #
 """
-<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="3.1.0">
+<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="3.2.0">
     <params>
         <param field="Mode2" label="Username" width="200px" required="true" default=""/>
         <param field="Mode3" label="Password" width="200px" required="true" default="" password="true"/>
@@ -32,21 +32,23 @@
     </params>
 </plugin>
 """
-
 #IMPORTS
-import sys
+import sys, os
 major,minor,x,y,z = sys.version_info
-sys.path.append('..')
 sys.path.append('/usr/lib/python3/dist-packages')
 sys.path.append('/usr/local/lib/python{}.{}/dist-packages'.format(major, minor))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+from domoticz_tools import *
 import Domoticz
 import datetime
 import threading
 import queue
 import json
-from bimmer_connected.account import ConnectedDriveAccount
-from bimmer_connected.country_selector import get_region_from_name
-from bimmer_connected.remote_services import ExecutionState
+import time
+import asyncio #inspired on https://www.domoticz.com/forum/viewtopic.php?f=65&p=283902
+from bimmer_connected.account import MyBMWAccount
+from bimmer_connected.api.regions import get_region_from_name
+from bimmer_connected.vehicle.remote_services import ExecutionState
 
 #DEVICES TO CREATE
 _UNIT_MILEAGE = 1
@@ -60,22 +62,14 @@ _UNIT_BAT_LEVEL = 8
 _UNIT_REMOTE_SERVICES = 9
 _UNIT_CAR = 10
 _UNIT_MILEAGE_COUNTER = 11
+_UNIT_DRIVING = 12
+_UNIT_HOME = 13
 
 #DEFAULT IMAGE
-_IMAGE = "Bmw"
-
-#THE HAERTBEAT IS EVERY 10s
-_MINUTE = 6
-
-#VALUE TO INDICATE THAT THE DEVICE TIMED-OUT
-_TIMEDOUT = 1
-
-#DEBUG
-_DEBUG_OFF = 0
-_DEBUG_ON = 2
+_IMAGE = 'Bmw'
 
 #BMW Information
-REGIONS = ['Rest_of_World', 'China', 'North_America']
+REGIONS = ['rest_of_world', 'china', 'north_america']
 REMOTE_LIGHT_FLASH = 'light-flash'
 REMOTE_VEHICLE_FINDER = 'vehicle-finder'
 REMOTE_DOOR_LOCK = 'door-lock'
@@ -90,77 +84,107 @@ REMOTE_AIR_CONDITIONING = 'climate-now'
 class BasePlugin:
 
     def __init__(self):
-        self.debug = _DEBUG_OFF
-        self.runAgain = _MINUTE
+        self.debug = DEBUG_OFF
+        self.runAgain = MINUTE
         self.errorLevel = 0
         self.myBMW = None
         self.region = REGIONS[0]
         self.myVehicle = None
         self.last_car_opened_time = datetime.datetime.now()
         self.car_opened_status_given = False
+        self.car_location = (None, None)
+        self.last_car_location = (None, None)
+        self.entering_home_distance = 1000
         self.tasksQueue = queue.Queue()
         self.tasksThread = threading.Thread(name='QueueThread', target=BasePlugin.handleTasks, args=(self,))
 
     def onStart(self):
-        Domoticz.Debug("onStart called")
+        Domoticz.Debug('onStart called')
 
         # Debugging On/Off
-        if Parameters["Mode6"] == "Debug":
-            self.debug = _DEBUG_ON
-        else:
-            self.debug = _DEBUG_OFF
+        self.debug = DEBUG_ON if Parameters['Mode6'] == 'Debug' else DEBUG_OFF
         Domoticz.Debugging(self.debug)
+        if self.debug == DEBUG_ON:
+            DumpConfigToLog(Parameters, Devices)
         
+        # Read technical parameters
+        Domoticz.Debug('Looking for configuration file {}Bmw.json'.format(Parameters['HomeFolder']))
+        try:
+            config = None
+            with open('{}Bmw.json'.format(Parameters['HomeFolder'])) as json_file:
+                config = json.load(json_file)
+            self.entering_home_distance = config['EnteringHomeDistance (m)']
+        except:
+            pass
+
         # Check region (especially because of updating from previous version
         if Parameters['Mode1'] in REGIONS:
             self.region = Parameters['Mode1']
 
         # Check if images are in database
         if _IMAGE not in Images:
-            Domoticz.Image("Bmw.zip").Create()
+            Domoticz.Image('Bmw.zip').Create()
 
-        # Create devices (USED BY DEFAULT)
-        CreateDevicesUsed()
-
-        # Create devices (NOT USED BY DEFAULT)
-        CreateDevicesNotUsed()
-
-        # Set all devices as timed out
-        TimeoutDevice(All=True)
+        # Create devices
+        if (_UNIT_MILEAGE not in Devices):
+            Domoticz.Device(Unit=_UNIT_MILEAGE, Name='Mileage', TypeName='Custom', Options={'Custom': '0;km'}, Image=Images[_IMAGE].ID, Used=1).Create()
+        if (_UNIT_MILEAGE_COUNTER not in Devices):
+            Domoticz.Device(Unit=_UNIT_MILEAGE_COUNTER, Name='Mileage (Day)', Type=113, Subtype=0, Switchtype=3, Options={'ValueUnits': 'km'}, Image=Images[_IMAGE].ID, Used=1).Create()
+        if (_UNIT_REMOTE_SERVICES not in Devices):
+            Domoticz.Device(Unit=_UNIT_REMOTE_SERVICES, Name='Remote Services', TypeName='Selector Switch', Options={'LevelActions': '|||||', 'LevelNames': '|{}|{}|{}|{}|{}'.format(REMOTE_LIGHT_FLASH, REMOTE_HORN, REMOTE_AIR_CONDITIONING, REMOTE_DOOR_LOCK, REMOTE_DOOR_UNLOCK), 'LevelOffHidden': 'false', 'SelectorStyle': '1'}, Image=Images[_IMAGE].ID, Used=1).Create()
+        if (_UNIT_DOORS not in Devices):
+            Domoticz.Device(Unit=_UNIT_DOORS, Name='Doors', Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
+        if (_UNIT_WINDOWS not in Devices):
+            Domoticz.Device(Unit=_UNIT_WINDOWS, Name='Windows', Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
+        if (_UNIT_REMAIN_RANGE_FUEL not in Devices):
+            Domoticz.Device(Unit=_UNIT_REMAIN_RANGE_FUEL, Name='Remain mileage (fuel)', TypeName='Custom', Options={'Custom': '0;km'}, Image=Images[_IMAGE].ID, Used=0).Create()
+        if (_UNIT_REMAIN_RANGE_ELEC not in Devices):
+            Domoticz.Device(Unit=_UNIT_REMAIN_RANGE_ELEC, Name='Remain mileage (elec)', TypeName='Custom', Options={'Custom': '0;km'}, Image=Images[_IMAGE].ID, Used=0).Create()
+        if (_UNIT_CHARGING not in Devices):
+            Domoticz.Device(Unit=_UNIT_CHARGING, Name='Charging', Type=244, Subtype=73, Switchtype=0, Image=Images[_IMAGE].ID, Used=0).Create()
+        if (_UNIT_CHARGING_REMAINING not in Devices):
+            Domoticz.Device(Unit=_UNIT_CHARGING_REMAINING, Name='Charging time', TypeName='Custom', Options={'Custom': '0;min'}, Image=Images[_IMAGE].ID, Used=0).Create()
+        if (_UNIT_BAT_LEVEL not in Devices):
+            Domoticz.Device(Unit=_UNIT_BAT_LEVEL, Name='Battery Level', TypeName='Custom', Options={'Custom': '0;%'}, Image=Images[_IMAGE].ID, Used=0).Create()
+        if (_UNIT_CAR not in Devices):
+            Domoticz.Device(Unit=_UNIT_CAR, Name='Car', Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
+        if (_UNIT_DRIVING not in Devices):
+            Domoticz.Device(Unit=_UNIT_DRIVING, Name='Driving', Type=244, Subtype=73, Switchtype=0, Image=Images[_IMAGE].ID, Used=0).Create()
+        if (_UNIT_HOME not in Devices):
+            Domoticz.Device(Unit=_UNIT_HOME, Name='Home', Type=244, Subtype=73, Switchtype=0, Image=Images[_IMAGE].ID, Used=1).Create()
+        TimeoutDevice(Devices, All=True)
 
         # Create BMW instance
         self.tasksThread.start()
         self.tasksQueue.put({'Action': 'Login'})
         self.tasksQueue.put({'Action': 'StatusUpdate'})
 
-        # Global settings
-        DumpConfigToLog()
-
     def onStop(self):
-        Domoticz.Debug("onStop called")
+        Domoticz.Debug('onStop called - Threads still active: {} (should be 1 = {})'.format(threading.active_count(), threading.current_thread().name))
         
         # Signal queue thread to exit
         self.tasksQueue.put(None)
-        self.tasksQueue.join()
+        self.tasksThread.join()
 
         # Wait until queue thread has exited
         Domoticz.Debug('Threads still active: {} (should be 1)'.format(threading.active_count()))
-        while threading.active_count() > 1:
+        endTime = time.time() + 70
+        while (threading.active_count() > 1) and (time.time() < endTime):
             for thread in threading.enumerate():
                 if thread.name != threading.current_thread().name:
                     Domoticz.Debug('Thread {} is still running, waiting otherwise Domoticz will abort on plugin exit.'.format(thread.name))
             time.sleep(1.0)
 
-        Domoticz.Debug('Plugin stopped')
+        Domoticz.Debug('Plugin stopped - Threads still active: {} (should be 1)'.format(threading.active_count()))
 
     def onConnect(self, Connection, Status, Description):
-        Domoticz.Debug("onConnect called ({}) with status={}".format(Connection.Name, Status))
+        Domoticz.Debug('onConnect called ({}) with status={}'.format(Connection.Name, Status))
 
     def onMessage(self, Connection, Data):
-        Domoticz.Debug("onMessage called ({})".format(Connection.Name))
+        Domoticz.Debug('onMessage called ({})'.format(Connection.Name))
 
     def onCommand(self, Unit, Command, Level, Hue):
-        Domoticz.Debug("onCommand called for Unit: {} - Parameter: {} - Level: {}".format(Unit, Command, Level))
+        Domoticz.Debug('onCommand called for Unit: {} - Parameter: {} - Level: {}'.format(Unit, Command, Level))
         if Unit == _UNIT_REMOTE_SERVICES and Command == 'Set Level':
             if Level:
                 if Level == 10:
@@ -177,13 +201,14 @@ class BasePlugin:
                     self.tasksQueue.put({'Action': 'StatusUpdate'})
 
     def onNotification(self, Name, Subject, Text, Status, Priority, Sound, ImageFile):
-        Domoticz.Debug("Notification")
+        Domoticz.Debug('Notification: {}, {}, {}, {}, {}, {}, {}'.format(
+            Name, Subject, Text, Status, Priority, Sound, ImageFile
+        ))
 
     def onDisconnect(self, Connection):
-        Domoticz.Debug("onDisconnect called ({})".format(Connection.Name))
+        Domoticz.Debug('onDisconnect called ({})'.format(Connection.Name))
 
     def onHeartbeat(self):
-        Domoticz.Debug("onHeartbeat called")
         
         self.runAgain -= 1
         if self.runAgain <= 0:
@@ -198,14 +223,12 @@ class BasePlugin:
             self.tasksQueue.put({'Action': 'StatusUpdate'})
 
             # Run again following the period in the settings
-            self.runAgain = _MINUTE*int(Parameters['Mode5'])
+            self.runAgain = MINUTE*int(Parameters['Mode5'])
             
             # If no correct communication in some trials...
             if self.errorLevel == 5:
-                Domoticz.Error("Too many errors received: devices are timedout!")
-                TimeoutDevice(True)
-        else:
-            Domoticz.Debug("onHeartbeat called, run again in {} heartbeats...".format(self.runAgain))
+                Domoticz.Error('Too many errors received: devices are timedout!')
+                TimeoutDevice(Devices, All=True)
 
     def handleTasks(self):
         try:
@@ -214,65 +237,80 @@ class BasePlugin:
                 task = self.tasksQueue.get(block=True)
                 if task is None:
                     Domoticz.Debug('Exiting task handler')
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.stop()
+                        loop.close()
+                    except:
+                        pass
                     self.MyBMW = None
+                    self.myVehicle = None
                     self.tasksQueue.task_done()
                     break
 
                 Domoticz.Debug('Handling task: {}.'.format(task['Action']))
                 if task['Action'] == 'Login':
                     try:
-                        self.myBMW = ConnectedDriveAccount(Parameters['Mode2'], Parameters['Mode3'], get_region_from_name(self.region))
-                    except:
-                        Domoticz.Error('Error login in ConnectedDrive for user {} and region {}.'.format(Parameters['Mode2'], self.region))
+                        self.myBMW = MyBMWAccount(Parameters['Mode2'], Parameters['Mode3'], get_region_from_name(self.region))
+                        Domoticz.Debug('Login done! MyBMW object: {}'.format(self.myBMW))
+                        if self.myBMW:
+                            asyncio.run(self.myBMW.get_vehicles())
+                    except Exception as err:
+                        Domoticz.Error('Error login in MyBMW for user {} and region {}.'.format(Parameters['Mode2'], self.region))
+                        Domoticz.Debug('Login error: {}'.format(err))
+                        #import traceback
+                        #Domoticz.Debug('Login error TRACEBACK: {}'.format(traceback.format_exc()))
                         self.myBMW = None
                         self.errorLevel += 1
                     else:
                         self.myVehicle = self.myBMW.get_vehicle(Parameters['Mode4'])
                         if self.myVehicle:
-                            Domoticz.Debug('Car {} found!'.format(self.myVehicle.name))
+                            Domoticz.Status('Login successful! Car {} (VIN:{}) found!'.format(self.myVehicle.name, Parameters['Mode4']))
                             self.updateVehicleStatus()
                         else:
                             Domoticz.Error('vin {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
-                            TimeoutDevice(True)
+                            TimeoutDevice(Devices, All=True)
 
                 elif task['Action'] == 'StatusUpdate':
-                    if self.myBMW and self.myVehicle:
+                    if self.myBMW:
                         try:
-                            self.myBMW.update_vehicle_states()
+                            asyncio.run(self.myBMW.get_vehicles())
                         except:
                             if not self.errorLevel:
-                                Domoticz.Status('Error occured in getting the status update of the BMW.')
+                                Domoticz.Log('Error occured in getting the status update of the BMW.')
                             self.errorLevel += 1
                         else:
                             self.myVehicle = self.myBMW.get_vehicle(Parameters['Mode4'])
                             if self.myVehicle:
                                 Domoticz.Debug('Car {} found after update!'.format(self.myVehicle.name))
                                 self.updateVehicleStatus()
+                                self.errorLevel = 0
                             else:
                                 if not self.errorLevel:
-                                    Domoticz.Status('BMW with VIN {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
+                                    Domoticz.Log('BMW with VIN {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
                                 self.errorLevel += 1
                             
                 elif task['Action'] in [REMOTE_LIGHT_FLASH, REMOTE_DOOR_LOCK, REMOTE_DOOR_UNLOCK, REMOTE_HORN, REMOTE_AIR_CONDITIONING]:
                     if self.myVehicle:
                         try:
                             if task['Action'] == REMOTE_LIGHT_FLASH:
-                                Status = self.myVehicle.remote_services.trigger_remote_light_flash()
+                                Status = asyncio.run(self.myVehicle.remote_services.trigger_remote_light_flash())
                             elif task['Action'] == REMOTE_HORN:
-                                Status = self.myVehicle.remote_services.trigger_remote_horn()
+                                Status = asyncio.run(self.myVehicle.remote_services.trigger_remote_horn())
                             elif task['Action'] == REMOTE_AIR_CONDITIONING:
-                                Status = self.myVehicle.remote_services.trigger_remote_air_conditioning()
+                                Status = asyncio.run(self.myVehicle.remote_services.trigger_remote_air_conditioning())
                             elif task['Action'] == REMOTE_DOOR_LOCK:
-                                Status = self.myVehicle.remote_services.trigger_remote_door_lock()
+                                Status = asyncio.run(self.myVehicle.remote_services.trigger_remote_door_lock())
                             elif task['Action'] == REMOTE_DOOR_UNLOCK:
-                                Status = self.myVehicle.remote_services.trigger_remote_door_unlock()
+                                Status = asyncio.run(self.myVehicle.remote_services.trigger_remote_door_unlock())
                             if Status.state != ExecutionState.EXECUTED:
                                  Domoticz.Error('Error executing remote service {} for {} (not executed).'.format(task['Action'], Parameters['Mode4']))
-                        except:
+                        except Exception as err:
                             Domoticz.Error('Error executing remote service {} for {} (unknown error).'.format(task['Action'], Parameters['Mode4']))
+                            Domoticz.Debug('Remote service error: {}'.format(err))
                     else:
                         Domoticz.Error('BMW with VIN {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
-                    UpdateDevice(_UNIT_REMOTE_SERVICES, 2, 0)
+                    UpdateDevice(False, Devices, _UNIT_REMOTE_SERVICES, 2, 0)
     
                 else:
                      Domoticz.Error('Invalid task/action name: {}.'.format(task['Action']))
@@ -287,59 +325,83 @@ class BasePlugin:
     def updateVehicleStatus(self):
 
         # Update status Doors
-        if self.myVehicle.status.all_lids_closed:
-            UpdateDevice(_UNIT_DOORS, 0, 0)
+        if self.myVehicle.doors_and_windows.all_lids_closed:
+            UpdateDevice(False, Devices, _UNIT_DOORS, 0, 0)
         else:
-            UpdateDevice(_UNIT_DOORS, 1, 0)
+            UpdateDevice(False, Devices, _UNIT_DOORS, 1, 0)
     
         # Update status Windows
-        if self.myVehicle.status.all_windows_closed:
-            UpdateDevice(_UNIT_WINDOWS, 0, 0)
+        if self.myVehicle.doors_and_windows.all_windows_closed:
+            UpdateDevice(False, Devices, _UNIT_WINDOWS, 0, 0)
         else:
-            UpdateDevice(_UNIT_WINDOWS, 1, 0)
+            UpdateDevice(False, Devices, _UNIT_WINDOWS, 1, 0)
 
         # Update status Locked
-        if self.myVehicle.status.door_lock_state == 'LOCKED':
-            UpdateDevice(_UNIT_CAR, 0, 0)
+        if self.myVehicle.doors_and_windows.door_lock_state == 'LOCKED':
+            UpdateDevice(False, Devices, _UNIT_CAR, 0, 0)
         else:
-            if UpdateDevice(_UNIT_CAR, 1, 0):
-                Domoticz.Debug("Car is opened now!")
+            if UpdateDevice(False, Devices, _UNIT_CAR, 1, 0):
+                Domoticz.Debug('Car is opened now!')
                 self.last_car_opened_time = datetime.datetime.now()
                 self.car_opened_status_given = False
 
         # Update Mileage
-        Domoticz.Debug('Units ({}) are not yet updated on device but hardcoded.'.format(self.myVehicle.status.mileage[1]))
-        UpdateDevice(_UNIT_MILEAGE, self.myVehicle.status.mileage[0], self.myVehicle.status.mileage[0])
-        UpdateDevice(_UNIT_MILEAGE_COUNTER, 0, self.myVehicle.status.mileage[0])
-
+        UpdateDevice(False, Devices, _UNIT_MILEAGE, self.myVehicle.mileage[0], self.myVehicle.mileage[0])
+        UpdateDevice(False, Devices, _UNIT_MILEAGE_COUNTER, 0, self.myVehicle.mileage[0])
+        if self.myVehicle.mileage[1] not in Devices[_UNIT_MILEAGE].Options['Custom']:
+            UpdateDeviceOptions(Devices, _UNIT_MILEAGE, Options={'Custom': '0;{}'.format(self.myVehicle.mileage[1])})
+        if self.myVehicle.mileage[1] not in Devices[_UNIT_MILEAGE_COUNTER].Options['ValueUnits']:
+            UpdateDeviceOptions(Devices, _UNIT_MILEAGE_COUNTER, Options={'ValueUnits': self.myVehicle.mileage[1], 'ValueQuantity': self.myVehicle.mileage[1]})
+            
         # Update Remaining mileage
-        if self.myVehicle.status.remaining_range_electric != None and self.myVehicle.status.remaining_range_electric != (None, None):
-            UpdateDevice(_UNIT_REMAIN_RANGE_ELEC, self.myVehicle.status.remaining_range_electric[0], self.myVehicle.status.remaining_range_electric[0])
-        if self.myVehicle.status.remaining_range_fuel != None and self.myVehicle.status.remaining_range_fuel != (None, None):
-            UpdateDevice(_UNIT_REMAIN_RANGE_FUEL, self.myVehicle.status.remaining_range_fuel[0], self.myVehicle.status.remaining_range_fuel[0])
+        if self.myVehicle.fuel_and_battery.remaining_range_electric != (None, None):
+            UpdateDevice(False, Devices, _UNIT_REMAIN_RANGE_ELEC, self.myVehicle.fuel_and_battery.remaining_range_electric[0], self.myVehicle.fuel_and_battery.remaining_range_electric[0])
+            if self.myVehicle.fuel_and_battery.remaining_range_electric[1] not in Devices[_UNIT_REMAIN_RANGE_ELEC].Options['Custom']:
+                UpdateDeviceOptions(Devices, _UNIT_REMAIN_RANGE_ELEC, Options={'Custom': '0;{}'.format(self.myVehicle.fuel_and_battery.remaining_range_electric[1])})
+        if self.myVehicle.fuel_and_battery.remaining_range_fuel != (None, None):
+            UpdateDevice(False, Devices, _UNIT_REMAIN_RANGE_FUEL, self.myVehicle.fuel_and_battery.remaining_range_fuel[0], self.myVehicle.fuel_and_battery.remaining_range_fuel[0])
+            if self.myVehicle.fuel_and_battery.remaining_range_fuel[1] not in Devices[_UNIT_REMAIN_RANGE_FUEL].Options['Custom']:
+                UpdateDeviceOptions(Devices, _UNIT_REMAIN_RANGE_FUEL, Options={'Custom': '0;{}'.format(self.myVehicle.fuel_and_battery.remaining_range_fuel[1])})
 
         # Update Electric charging
-        if self.myVehicle.status.charging_status != None:
-            if self.myVehicle.status.charging_status == 'CHARGING':
-                UpdateDevice(_UNIT_CHARGING, 1, 1)
+        if self.myVehicle.fuel_and_battery.charging_status != None:
+            if self.myVehicle.fuel_and_battery.charging_status == 'CHARGING':
+                UpdateDevice(False, Devices, _UNIT_CHARGING, 1, 1)
             else:
-                UpdateDevice(_UNIT_CHARGING, 0, 0)
+                UpdateDevice(False, Devices, _UNIT_CHARGING, 0, 0)
 
         # Update Charging Percentage
-        if self.myVehicle.status.charging_level_hv != None:
-            UpdateDevice(_UNIT_BAT_LEVEL, self.myVehicle.status.charging_level_hv, self.myVehicle.status.charging_level_hv)
+        if self.myVehicle.fuel_and_battery.remaining_battery_percent != None:
+            UpdateDevice(False, Devices, _UNIT_BAT_LEVEL, self.myVehicle.fuel_and_battery.remaining_battery_percent, self.myVehicle.fuel_and_battery.remaining_battery_percent)
 
         # Update Charging Time (minutes)
-        if self.myVehicle.status.charging_time_remaining != None:
-            UpdateDevice(_UNIT_CHARGING_REMAINING, self.myVehicle.status.charging_time_remaining, self.myVehicle.status.charging_time_remaining)
+        if self.myVehicle.fuel_and_battery.charging_end_time:
+            charging_time_remaining = round((self.myVehicle.timestamp-self.myVehicle.fuel_and_battery.charging_end_time)/3600, 2)
+            UpdateDevice(False, Devices, _UNIT_CHARGING_REMAINING, charging_time_remaining, charging_time_remaining)
+
+        # Location of vehicle
+        home_location = Settings['Location'].split(';')
+        self.car_location = (self.myVehicle.vehicle_location.location.latitude, self.myVehicle.vehicle_location.location.longitude)
+        distance = getDistance(self.car_location, (float(home_location[0]), float(home_location[1])))
+        Domoticz.Debug('Distance car-home: {} km'.format(distance))
+        if distance*1000 < self.entering_home_distance:
+            UpdateDevice(False, Devices, _UNIT_HOME, 1, 1)
+        else:
+            UpdateDevice(False, Devices, _UNIT_HOME, 0, 0)
+        
+        # Update driving status
+        #if self.myVehicle.is_vehicle_active:
+        if self.last_car_location != (None, None):
+            if self.last_car_location == self.car_location:
+                UpdateDevice(False, Devices, _UNIT_DRIVING, 0, 0)
+            else:
+                UpdateDevice(False, Devices, _UNIT_DRIVING, 1, 1)
+        self.last_car_location = self.car_location
 
         # Switch for remote services
-        if Devices[_UNIT_REMOTE_SERVICES].TimedOut == _TIMEDOUT:
-            UpdateDevice(_UNIT_REMOTE_SERVICES, Devices[_UNIT_REMOTE_SERVICES].nValue, Devices[_UNIT_REMOTE_SERVICES].sValue, TimedOut=0)
+        if Devices[_UNIT_REMOTE_SERVICES].TimedOut == TIMEDOUT:
+            UpdateDevice(False, Devices, _UNIT_REMOTE_SERVICES, Devices[_UNIT_REMOTE_SERVICES].nValue, Devices[_UNIT_REMOTE_SERVICES].sValue, TimedOut=0)
 
-        # All went well...
-        self.errorLevel = 0
-                
 
 global _plugin
 _plugin = BasePlugin()
@@ -377,77 +439,5 @@ def onHeartbeat():
     _plugin.onHeartbeat()
 
 ################################################################################
-# Generic helper functions
+# Specific helper functions
 ################################################################################
-
-#DUMP THE PARAMETER
-def DumpConfigToLog():
-    for x in Parameters:
-        if Parameters[x] != "":
-            Domoticz.Debug("'" + x + "':'" + str(Parameters[x]) + "'")
-    Domoticz.Debug("Device count: " + str(len(Devices)))
-    for x in Devices:
-        Domoticz.Debug("Device:           " + str(x) + " - " + str(Devices[x]))
-        Domoticz.Debug("Device ID:       '" + str(Devices[x].ID) + "'")
-        Domoticz.Debug("Device Name:     '" + Devices[x].Name + "'")
-        Domoticz.Debug("Device nValue:    " + str(Devices[x].nValue))
-        Domoticz.Debug("Device sValue:   '" + Devices[x].sValue + "'")
-        Domoticz.Debug("Device LastLevel: " + str(Devices[x].LastLevel))
-
-#UPDATE THE DEVICE
-def UpdateDevice(Unit, nValue, sValue, Image=None, TimedOut=0, AlwaysUpdate=False):
-    if Unit in Devices:
-        if not Image:
-            Image = Devices[Unit].Image
-        if Devices[Unit].nValue != int(nValue) or Devices[Unit].sValue != str(sValue) or Devices[Unit].TimedOut != TimedOut or Devices[Unit].Image != Image or AlwaysUpdate:
-            Devices[Unit].Update(nValue=int(nValue), sValue=str(sValue), Image=Image, TimedOut=TimedOut)
-            Domoticz.Debug('Update unit {}: {} - {} - {}'.format(Unit, Devices[Unit].Name, nValue, sValue))
-            Updated = True
-        else:
-            Devices[Unit].Touch()
-            Updated = False
-        return Updated
-
-#SET DEVICE ON TIMED-OUT (OR ALL DEVICES)
-def TimeoutDevice(All, Unit=0):
-    if All:
-        for x in Devices:
-            UpdateDevice(x, Devices[x].nValue, Devices[x].sValue, Devices[x].Image, TimedOut=_TIMEDOUT)
-    else:
-        UpdateDevice(Unit, Devices[Unit].nValue, Devices[Unit].sValue, Devices[Unit].Image, TimedOut=_TIMEDOUT)
-
-#CREATE ALL THE DEVICES (USED)
-def CreateDevicesUsed():
-    if (_UNIT_MILEAGE not in Devices):
-        Domoticz.Device(Unit=_UNIT_MILEAGE, Name="Mileage", TypeName="Custom", Options={"Custom": "0;km"}, Image=Images[_IMAGE].ID, Used=1).Create()
-    if (_UNIT_MILEAGE_COUNTER not in Devices):
-        Domoticz.Device(Unit=_UNIT_MILEAGE_COUNTER, Name="Mileage (Day)", Type=113, Subtype=0, Switchtype=3, Options={"ValueUnits": "km", "ValueQuantity": "Kilometers"}, Image=Images[_IMAGE].ID, Used=1).Create()
-    if (_UNIT_REMOTE_SERVICES not in Devices):
-        Domoticz.Device(Unit=_UNIT_REMOTE_SERVICES, Name="Remote Services", TypeName="Selector Switch", Options={"LevelActions": "|||||", "LevelNames": "|" + REMOTE_LIGHT_FLASH + "|" + REMOTE_HORN + "|" + REMOTE_AIR_CONDITIONING + "|" + REMOTE_DOOR_LOCK + "|" + REMOTE_DOOR_UNLOCK, "LevelOffHidden": "false", "SelectorStyle": "1"}, Image=Images[_IMAGE].ID, Used=1).Create()
-
-#CREATE ALL THE DEVICES (NOT USED)
-def CreateDevicesNotUsed():
-    if (_UNIT_DOORS not in Devices):
-        Domoticz.Device(Unit=_UNIT_DOORS, Name="Doors", Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
-    if (_UNIT_WINDOWS not in Devices):
-        Domoticz.Device(Unit=_UNIT_WINDOWS, Name="Windows", Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
-    if (_UNIT_REMAIN_RANGE_FUEL not in Devices):
-        Domoticz.Device(Unit=_UNIT_REMAIN_RANGE_FUEL, Name="Remain mileage (fuel)", TypeName="Custom", Options={"Custom": "0;km"}, Image=Images[_IMAGE].ID, Used=0).Create()
-    if (_UNIT_REMAIN_RANGE_ELEC not in Devices):
-        Domoticz.Device(Unit=_UNIT_REMAIN_RANGE_ELEC, Name="Remain mileage (elec)", TypeName="Custom", Options={"Custom": "0;km"}, Image=Images[_IMAGE].ID, Used=0).Create()
-    if (_UNIT_CHARGING not in Devices):
-        Domoticz.Device(Unit=_UNIT_CHARGING, Name="Charging", Type=244, Subtype=73, Switchtype=0, Image=Images[_IMAGE].ID, Used=0).Create()
-    if (_UNIT_CHARGING_REMAINING not in Devices):
-        Domoticz.Device(Unit=_UNIT_CHARGING_REMAINING, Name="Charging time", TypeName="Custom", Options={"Custom": "0;min"}, Image=Images[_IMAGE].ID, Used=0).Create()
-    if (_UNIT_BAT_LEVEL not in Devices):
-        Domoticz.Device(Unit=_UNIT_BAT_LEVEL, Name="Battery Level", TypeName="Custom", Options={"Custom": "0;%"}, Image=Images[_IMAGE].ID, Used=0).Create()
-    if (_UNIT_CAR not in Devices):
-        Domoticz.Device(Unit=_UNIT_CAR, Name="Car", Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
-
-#GET CPU TEMPERATURE
-def getCPUtemperature():
-    try:
-        res = os.popen("cat /sys/class/thermal/thermal_zone0/temp").readline()
-    except:
-        res = "0"
-    return round(float(res)/1000,1)
