@@ -67,6 +67,10 @@ A Bmw.json file is available to update the technical configuration. This file is
 * you can use the remote services in combination with a script that looks to the Google Calendar... In this way it is possible to plan the start of the airco/heating.
 * you can create a small script that activate other devices one the car is detected coming "home". I personally use this to switch already on several devices so that my house is "ready" once arriving by car.
 
+## Privacy
+For the management of the "Home" function, the geolocation of the car is used. This means that the location coordinates of the car is known by the plugin. However for privacy reason, these coordinates are NOT stored in any matter in the plugin. Only the last coordinate is kept in volatile memory and systematically overwritten. This coordinates are also lost once Domoticz or the plugin is stopped, reset, removed, ...
+
+
 Success!
 
 **Don't forget a small gift by using the donation button...**
