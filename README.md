@@ -15,11 +15,14 @@ Domoticz plugin working with BMW Connected Drive. A big changes is introduced si
 * From plugin 2.0.0, the new services based on the MyBMW app are integrated. This version does not work anymore due to changes at the server side of BMW. The status of the vehicle cannot longer be retrieved.
 * From plugin 3.0.0, the plugin uses bimmer_connected (https://github.com/bimmerconnected/bimmer_connected) in threading mode. It solves the problem with the vehicle status update by adding a workaround in the plugin.
 * From plugin 3.1.0 (still working on it), all functionality is used from the bimmer_connected library without specific code as workaround. Minimal version of the bimmer_connected library is 0.8.0.
+* From plugin 3.2.0, there is the need to install at least bimmer_connected library 0.9.0.0b6. Be aware that this library contains some compatibility breaking changes that impacted the plugin (eg using the Asyncio python mechanism). At the time of the update of the BMW plugin version 0.9.0.0b6 is still beta version.
 
 It is highly considered to follow the bimmer_connected evolutions on https://github.com/bimmerconnected/bimmer_connected as BMW is highly refactoring. You can also find more information about the supported cars (and functionality). Not all functionality is backported to Domoticz (yet). If there is an interesting functionality to add, let me know.
 
 Currently it supports the keep track of the following information:
-* Mileage
+* Mileage (several devices are created to followup the mileage)
+* Driving (indicates whether the car is driving or not)
+* Home (indicates whether the car is located within a defined area)
 * Doors, windows and car: open - closed
 * Remaining mileage for fuel and electric
 * Remote services: flash light, horn, activate airco/heating, lock/unlock car (in case you installed a previous version without all these remote services, delete first the device in Domoticz, it will be recreated with all features afterwards)
@@ -37,7 +40,7 @@ Remark that using remote services heavily is blocked by BMW. They give a dedicat
 Hint: you can use the remote services in combination with a script that looks to the Google Calendar... In this way it is possible to plan the start of the airco/heating.
 
 ## Installation (linux)
-Preliminary install bimmer_connected by with ```sudo pip3 install bimmer_connected```.
+Preliminary install bimmer_connected by with ```sudo pip3 install bimmer_connected``` or alternatively ```sudo pip3 install bimmer_connected==[version]``` to install a specific version.
 Be sure that the python3 module ```threading``` and ```queue``` is installed (otherwise install them also as described below).
 
 Follow this procedure to install the plugin.
@@ -50,6 +53,17 @@ Follow this procedure to install the plugin.
 
 ## Configuration
 Enter your BMW Connected Drive username and password, together with your with your VIN number (Vehicle Identification Number). The number can be found in your official BMW Connected Drive APP-Information.
+
+## Technical configuration
+A Bmw.json file is available to update the technical configuration. This file is optional and when the file is not available, default values are used.
+
+```
+{
+"EnteringHomeDistance (m)": 1000
+}
+```
+
+* EnteringHomeDistance [default 1000]: indicate the distance (in meters) from the Domoticz location (set in the Domoticz system setup) to trigger the "Home" functionality. Once the car is within the indicate area, the Home device will be set to "on".
 
 Success!
 
