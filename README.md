@@ -37,8 +37,6 @@ Today, the plugin does not support BMW Connected Drive cars in China and USA.
 
 Remark that using remote services heavily is blocked by BMW. They give a dedicated message back in that case (it will show up in the Domoticz log also). So fast executing remote service one after the other won't be successful.
 
-Hint: you can use the remote services in combination with a script that looks to the Google Calendar... In this way it is possible to plan the start of the airco/heating.
-
 ## Installation (linux)
 Preliminary install bimmer_connected by with ```sudo pip3 install bimmer_connected``` or alternatively ```sudo pip3 install bimmer_connected==[version]``` to install a specific version.
 Be sure that the python3 module ```threading``` and ```queue``` is installed (otherwise install them also as described below).
@@ -64,6 +62,10 @@ A Bmw.json file is available to update the technical configuration. This file is
 ```
 
 * EnteringHomeDistance [default 1000]: indicate the distance (in meters) from the Domoticz location (set in the Domoticz system setup) to trigger the "Home" functionality. Once the car is within the indicate area, the Home device will be set to "on".
+
+## Tips/Hints
+* you can use the remote services in combination with a script that looks to the Google Calendar... In this way it is possible to plan the start of the airco/heating.
+* you can create a small script that activate other devices one the car is detected coming "home". I personally use this to switch already on several devices so that my house is "ready" once arriving by car.
 
 Success!
 
