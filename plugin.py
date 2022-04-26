@@ -215,7 +215,7 @@ class BasePlugin:
 
             # Check if car is locked
             if int(Devices[_UNIT_CAR].nValue) and not self.car_opened_status_given and datetime.datetime.now()-self.last_car_opened_time>datetime.timedelta(seconds=60):
-                Domoticz.Status('ATTTENTION: Car is not closed!!')
+                Domoticz.Status('ATTTENTION: Car is not closed since {}!!'.format(self.last_car_opened_time))
                 self.car_opened_status_given = True
 
             if self.myBMW == None:
@@ -250,6 +250,7 @@ class BasePlugin:
 
                 Domoticz.Debug('Handling task: {}.'.format(task['Action']))
                 if task['Action'] == 'Login':
+                    self.myVehicle = None
                     try:
                         self.myBMW = MyBMWAccount(Parameters['Mode2'], Parameters['Mode3'], get_region_from_name(self.region))
                         Domoticz.Debug('Login done! MyBMW object: {}'.format(self.myBMW))
@@ -273,8 +274,14 @@ class BasePlugin:
 
                 elif task['Action'] == 'StatusUpdate':
                     if self.myBMW:
+                        self.myVehicle = None
                         try:
                             asyncio.run(self.myBMW.get_vehicles())
+                        except RuntimeError: # WORKAROUND FOR https://github.com/bimmerconnected/bimmer_connected/issues/430
+                            self.myBMW = None
+                            if not self.errorLevel:
+                                Domoticz.Log('Error occured in getting the status update of the BMW - activating workaround.')
+                            self.errorLevel += 1
                         except:
                             if not self.errorLevel:
                                 Domoticz.Log('Error occured in getting the status update of the BMW.')
@@ -310,7 +317,7 @@ class BasePlugin:
                             Domoticz.Debug('Remote service error: {}'.format(err))
                     else:
                         Domoticz.Error('BMW with VIN {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
-                    UpdateDevice(False, Devices, _UNIT_REMOTE_SERVICES, 2, 0)
+                    UpdateDevice(True, Devices, _UNIT_REMOTE_SERVICES, 2, 0)
     
                 else:
                      Domoticz.Error('Invalid task/action name: {}.'.format(task['Action']))
