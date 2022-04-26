@@ -58,7 +58,8 @@ def UpdateDevice(AlwaysUpdate, Devices, Unit, nValue, sValue, **kwargs):
         kwargs = { key : value for key, value in kwargs.items() if value != getattr(Devices[Unit], key, None) }
         default_kwargs = { 'TimedOut': 0 }
         kwargs = { **default_kwargs, **kwargs }
-        if AlwaysUpdate or Devices[Unit].nValue != int(nValue) or Devices[Unit].sValue != str(sValue) or Devices[Unit].TimedOut != getattr(Devices[Unit], 'TimedOut', None):
+        #if AlwaysUpdate or Devices[Unit].nValue != int(nValue) or Devices[Unit].sValue != str(sValue) or Devices[Unit].TimedOut != getattr(Devices[Unit], 'TimedOut', None):
+        if AlwaysUpdate or Devices[Unit].nValue != int(nValue) or Devices[Unit].sValue != str(sValue) or Devices[Unit].TimedOut != kwargs['TimedOut']:
             Domoticz.Debug('Update {}: nValue {} - sValue {} - Other: {}'.format(Devices[Unit].Name, nValue, sValue, kwargs))
             Devices[Unit].Update(nValue=int(nValue), sValue=str(sValue), **kwargs)
             Updated = True
@@ -76,9 +77,9 @@ def UpdateDeviceBatSig(AlwaysUpdate, Devices, Unit, BatteryLevel=255, SignalLeve
 def TimeoutDevice(Devices, All=True, Unit=0):
     if All:
         for x in Devices:
-            UpdateDevice(False, Devices, x, Devices[x].nValue, Devices[x].sValue, Image=Devices[x].Image, TimedOut=TIMEDOUT)
+            UpdateDevice(False, Devices, x, Devices[x].nValue, Devices[x].sValue, TimedOut=TIMEDOUT)
     else:
-        UpdateDevice(False, Devices, Unit, Devices[Unit].nValue, Devices[Unit].sValue, Image=Devices[Unit].Image, TimedOut=TIMEDOUT)
+        UpdateDevice(False, Devices, Unit, Devices[Unit].nValue, Devices[Unit].sValue, TimedOut=TIMEDOUT)
 
 #UPDATE THE OPTIONS OF A DEVICE
 def UpdateDeviceOptions(Devices, Unit, Options={}):
@@ -200,5 +201,3 @@ def getDistance(origin, destination):
     d = radius * c
 
     return d
-
-
