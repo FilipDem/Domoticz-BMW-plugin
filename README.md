@@ -57,11 +57,15 @@ A Bmw.json file is available to update the technical configuration. This file is
 
 ```
 {
-"EnteringHomeDistance (m)": 1000
+"EnteringHomeDistance (m)": 1000,
+"EnteringHomeDistance_FastPollingDistance (m)": 2000,
+"EnteringHomeDistance_FastPollingDelay (min)": 2
 }
 ```
 
 * EnteringHomeDistance [default 1000]: indicate the distance (in meters) from the Domoticz location (set in the Domoticz system setup) to trigger the "Home" functionality. Once the car is within the indicate area, the Home device will be set to "on".
+* EnteringHomeDistance_FastPollingDistance (m) [default 2000]: indicate the distance (in meters) from the Domoticz location to increase the update of the BMW Status requests.
+* EnteringHomeDistance_FastPollingDelay (min) [default 2]: Delay between update of BMW Status readings. This delay will be applied once the car is at a distance lower than EnteringHomeDistance_FastPollingDistance.
 
 ## Tips/Hints
 * you can use the remote services in combination with a script that looks to the Google Calendar... In this way it is possible to plan the start of the airco/heating.
