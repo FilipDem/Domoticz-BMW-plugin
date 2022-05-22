@@ -58,8 +58,7 @@ def UpdateDevice(AlwaysUpdate, Devices, Unit, nValue, sValue, **kwargs):
         kwargs = { key : value for key, value in kwargs.items() if value != getattr(Devices[Unit], key, None) }
         default_kwargs = { 'TimedOut': 0 }
         kwargs = { **default_kwargs, **kwargs }
-        #if AlwaysUpdate or Devices[Unit].nValue != int(nValue) or Devices[Unit].sValue != str(sValue) or Devices[Unit].TimedOut != getattr(Devices[Unit], 'TimedOut', None):
-        if AlwaysUpdate or Devices[Unit].nValue != int(nValue) or Devices[Unit].sValue != str(sValue) or Devices[Unit].TimedOut != kwargs['TimedOut']:
+        if AlwaysUpdate or Devices[Unit].nValue != int(nValue) or Devices[Unit].sValue != str(sValue) or Devices[Unit].TimedOut != kwargs['TimedOut'] or len(kwargs)>1:
             Domoticz.Debug('Update {}: nValue {} - sValue {} - Other: {}'.format(Devices[Unit].Name, nValue, sValue, kwargs))
             Devices[Unit].Update(nValue=int(nValue), sValue=str(sValue), **kwargs)
             Updated = True
@@ -201,3 +200,4 @@ def getDistance(origin, destination):
     d = radius * c
 
     return d
+
