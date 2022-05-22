@@ -10,7 +10,7 @@
 # Including the threading...
 #
 """
-<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="3.2.0">
+<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="3.2.1">
     <params>
         <param field="Mode2" label="Username" width="200px" required="true" default=""/>
         <param field="Mode3" label="Password" width="200px" required="true" default="" password="true"/>
@@ -95,7 +95,10 @@ class BasePlugin:
         self.car_opened_status_given = False
         self.car_location = (None, None)
         self.last_car_location = (None, None)
+        self.distance_from_home = 0
         self.entering_home_distance = 1000
+        self.entering_home_distance_fast_polling_distance = 2000
+        self.entering_home_distance_fast_polling_delay = 2
         self.tasksQueue = queue.Queue()
         self.tasksThread = threading.Thread(name='QueueThread', target=BasePlugin.handleTasks, args=(self,))
 
@@ -115,6 +118,8 @@ class BasePlugin:
             with open('{}Bmw.json'.format(Parameters['HomeFolder'])) as json_file:
                 config = json.load(json_file)
             self.entering_home_distance = config['EnteringHomeDistance (m)']
+            self.entering_home_distance_fast_polling_distance = config['EnteringHomeDistance_FastPollingDistance (m)']
+            self.entering_home_distance_fast_polling_delay = config['EnteringHomeDistance_FastPollingDelay (min)']
         except:
             pass
 
@@ -225,6 +230,8 @@ class BasePlugin:
 
             # Run again following the period in the settings
             self.runAgain = MINUTE*int(Parameters['Mode5'])
+            if self.distance_from_home*1000 < self.entering_home_distance_fast_polling_distance and self.distance_from_home*1000 > self.entering_home_distance:
+                self.runAgain = MINUTE*self.entering_home_distance_fast_polling_delay
             
             # If no correct communication in some trials...
             if self.errorLevel == 5:
@@ -262,6 +269,8 @@ class BasePlugin:
                         Domoticz.Debug('Login error: {}'.format(err))
                         #import traceback
                         #Domoticz.Debug('Login error TRACEBACK: {}'.format(traceback.format_exc()))
+                        #with open('{}Bmw_traceback.txt'.format(Parameters['HomeFolder']), "w") as myfile:
+                        #    myfile.write('{}'.format(traceback.format_exc()))
                         self.myBMW = None
                         self.errorLevel += 1
                     else:
@@ -390,9 +399,9 @@ class BasePlugin:
         # Location of vehicle
         home_location = Settings['Location'].split(';')
         self.car_location = (self.myVehicle.vehicle_location.location.latitude, self.myVehicle.vehicle_location.location.longitude)
-        distance = getDistance(self.car_location, (float(home_location[0]), float(home_location[1])))
-        Domoticz.Debug('Distance car-home: {} km'.format(distance))
-        if distance*1000 < self.entering_home_distance:
+        self.distance_from_home = getDistance(self.car_location, (float(home_location[0]), float(home_location[1])))
+        Domoticz.Debug('Distance car-home: {} km'.format(self.distance_from_home))
+        if self.distance_from_home*1000 < self.entering_home_distance:
             UpdateDevice(False, Devices, _UNIT_HOME, 1, 1)
         else:
             UpdateDevice(False, Devices, _UNIT_HOME, 0, 0)
