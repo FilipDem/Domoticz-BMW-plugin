@@ -10,7 +10,7 @@
 # Including the threading...
 #
 """
-<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="3.2.1">
+<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="3.2.2">
     <params>
         <param field="Mode2" label="Username" width="200px" required="true" default=""/>
         <param field="Mode3" label="Password" width="200px" required="true" default="" password="true"/>
@@ -354,7 +354,7 @@ class BasePlugin:
             UpdateDevice(False, Devices, _UNIT_WINDOWS, 1, 0)
 
         # Update status Locked
-        if self.myVehicle.doors_and_windows.door_lock_state == 'LOCKED':
+        if self.myVehicle.doors_and_windows.door_lock_state == 'SECURED':
             UpdateDevice(False, Devices, _UNIT_CAR, 0, 0)
         else:
             if UpdateDevice(False, Devices, _UNIT_CAR, 1, 0):
