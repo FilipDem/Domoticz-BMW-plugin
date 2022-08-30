@@ -217,12 +217,13 @@ class BasePlugin:
     def onHeartbeat(self):
         
         self.runAgain -= 1
-        if self.runAgain <= 0:
 
-            # Check if car is locked
-            if int(Devices[_UNIT_CAR].nValue) and not self.car_opened_status_given and datetime.datetime.now()-self.last_car_opened_time>datetime.timedelta(seconds=60):
-                Domoticz.Status('ATTTENTION: Car is not closed since {}!!'.format(self.last_car_opened_time))
-                self.car_opened_status_given = True
+        # Check if car is locked
+        if int(Devices[_UNIT_CAR].nValue) and not self.car_opened_status_given and datetime.datetime.now()-self.last_car_opened_time>datetime.timedelta(minutes=60):
+            Domoticz.Status('ATTTENTION: Car is not closed since {}!!'.format(self.last_car_opened_time))
+            self.car_opened_status_given = True
+
+        if self.runAgain <= 0:
 
             if self.myBMW == None:
                 self.tasksQueue.put({'Action': 'Login'})
@@ -354,7 +355,7 @@ class BasePlugin:
             UpdateDevice(False, Devices, _UNIT_WINDOWS, 1, 0)
 
         # Update status Locked
-        if self.myVehicle.doors_and_windows.door_lock_state == 'SECURED':
+        if self.myVehicle.doors_and_windows.door_lock_state in ['SECURED', 'LOCKED']:
             UpdateDevice(False, Devices, _UNIT_CAR, 0, 0)
         else:
             if UpdateDevice(False, Devices, _UNIT_CAR, 1, 0):
