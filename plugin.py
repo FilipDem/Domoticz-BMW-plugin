@@ -394,7 +394,7 @@ class BasePlugin:
 
         # Update Charging Time (minutes)
         if self.myVehicle.fuel_and_battery.charging_end_time:
-            charging_time_remaining = round((self.myVehicle.fuel_and_battery.charging_end_time.astimezone(pytz.utc)-self.myVehicle.timestamp.replace(tzinfo=datetime.timezone.utc)).total_seconds()/60, 2)
+            charging_time_remaining = max(0, round((self.myVehicle.fuel_and_battery.charging_end_time.astimezone(pytz.utc)-self.myVehicle.timestamp.replace(tzinfo=datetime.timezone.utc)).total_seconds()/60, 2))
             UpdateDevice(False, Devices, _UNIT_CHARGING_REMAINING, charging_time_remaining, charging_time_remaining)
 
         # Location of vehicle
