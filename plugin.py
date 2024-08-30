@@ -77,6 +77,7 @@ REMOTE_DOOR_LOCK = 'door-lock'
 REMOTE_DOOR_UNLOCK = 'door-unlock'
 REMOTE_HORN = 'horn-blow'
 REMOTE_AIR_CONDITIONING = 'climate-now'
+REMOTE_CHARGE_NOW = 'charge_now'
 
 ################################################################################
 # Start Plugin
@@ -134,10 +135,10 @@ class BasePlugin:
         # Create devices
         if (_UNIT_MILEAGE not in Devices):
             Domoticz.Device(Unit=_UNIT_MILEAGE, Name='Mileage', TypeName='Custom', Options={'Custom': '0;km'}, Image=Images[_IMAGE].ID, Used=1).Create()
-        if (_UNIT_MILEAGE_COUNTER not in Devices):
-            Domoticz.Device(Unit=_UNIT_MILEAGE_COUNTER, Name='Mileage (Day)', Type=113, Subtype=0, Switchtype=3, Options={'ValueUnits': 'km'}, Image=Images[_IMAGE].ID, Used=1).Create()
+#        if (_UNIT_MILEAGE_COUNTER not in Devices):
+#            Domoticz.Device(Unit=_UNIT_MILEAGE_COUNTER, Name='Mileage (Day)', Type=113, Subtype=0, Switchtype=3, Options={'ValueUnits': 'km'}, Image=Images[_IMAGE].ID, Used=1).Create()
         if (_UNIT_REMOTE_SERVICES not in Devices):
-            Domoticz.Device(Unit=_UNIT_REMOTE_SERVICES, Name='Remote Services', TypeName='Selector Switch', Options={'LevelActions': '|||||', 'LevelNames': '|{}|{}|{}|{}|{}'.format(REMOTE_LIGHT_FLASH, REMOTE_HORN, REMOTE_AIR_CONDITIONING, REMOTE_DOOR_LOCK, REMOTE_DOOR_UNLOCK), 'LevelOffHidden': 'false', 'SelectorStyle': '1'}, Image=Images[_IMAGE].ID, Used=1).Create()
+            Domoticz.Device(Unit=_UNIT_REMOTE_SERVICES, Name='Remote Services', TypeName='Selector Switch', Options={'LevelActions': '|||||', 'LevelNames': '|{}|{}|{}|{}|{}|{}'.format(REMOTE_LIGHT_FLASH, REMOTE_HORN, REMOTE_AIR_CONDITIONING, REMOTE_DOOR_LOCK, REMOTE_DOOR_UNLOCK, REMOTE_CHARGE_NOW), 'LevelOffHidden': 'false', 'SelectorStyle': '1'}, Image=Images[_IMAGE].ID, Used=1).Create()
         if (_UNIT_DOORS not in Devices):
             Domoticz.Device(Unit=_UNIT_DOORS, Name='Doors', Type=244, Subtype=73, Switchtype=11, Image=Images[_IMAGE].ID, Used=0).Create()
         if (_UNIT_WINDOWS not in Devices):
@@ -205,6 +206,8 @@ class BasePlugin:
                 elif Level == 50:
                     self.tasksQueue.put({'Action': REMOTE_DOOR_UNLOCK})
                     self.tasksQueue.put({'Action': 'StatusUpdate'})
+                elif Level == 60:
+                    self.tasksQueue.put({'Action': REMOTE_CHARGE_NOW})
 
     def onNotification(self, Name, Subject, Text, Status, Priority, Sound, ImageFile):
         Domoticz.Debug('Notification: {}, {}, {}, {}, {}, {}, {}'.format(
@@ -238,6 +241,7 @@ class BasePlugin:
             if self.errorLevel == 5:
                 Domoticz.Error('Too many errors received: devices are timedout!')
                 TimeoutDevice(Devices, All=True)
+                self.myBMW = None
 
     def handleTasks(self):
         try:
@@ -268,10 +272,11 @@ class BasePlugin:
                     except Exception as err:
                         Domoticz.Error('Error login in MyBMW for user {} and region {}.'.format(Parameters['Mode2'], self.region))
                         Domoticz.Debug('Login error: {}'.format(err))
-                        #import traceback
-                        #Domoticz.Debug('Login error TRACEBACK: {}'.format(traceback.format_exc()))
-                        #with open('{}Bmw_traceback.txt'.format(Parameters['HomeFolder']), "w") as myfile:
-                        #    myfile.write('{}'.format(traceback.format_exc()))
+                        import traceback
+                        Domoticz.Debug('Login error TRACEBACK: {}'.format(traceback.format_exc()))
+                        with open('{}Bmw_traceback.txt'.format(Parameters['HomeFolder']), "w") as myfile:
+                            myfile.write('{}'.format(traceback.format_exc()))
+                            myfile.write('---------------------------------\n')
                         self.myBMW = None
                         self.errorLevel += 1
                     else:
@@ -289,6 +294,11 @@ class BasePlugin:
                         try:
                             asyncio.run(self.myBMW.get_vehicles())
                         except RuntimeError: # WORKAROUND FOR https://github.com/bimmerconnected/bimmer_connected/issues/430
+                            import traceback
+                            Domoticz.Debug('Workaround error TRACEBACK: {}'.format(traceback.format_exc()))
+                            with open('{}Bmw_traceback.txt'.format(Parameters['HomeFolder']), "w") as myfile:
+                                myfile.write('{}'.format(traceback.format_exc()))
+                                myfile.write('---------------------------------\n')
                             self.myBMW = None
                             if not self.errorLevel:
                                 Domoticz.Log('Error occured in getting the status update of the BMW - activating workaround.')
@@ -308,7 +318,7 @@ class BasePlugin:
                                     Domoticz.Log('BMW with VIN {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
                                 self.errorLevel += 1
                             
-                elif task['Action'] in [REMOTE_LIGHT_FLASH, REMOTE_DOOR_LOCK, REMOTE_DOOR_UNLOCK, REMOTE_HORN, REMOTE_AIR_CONDITIONING]:
+                elif task['Action'] in [REMOTE_LIGHT_FLASH, REMOTE_DOOR_LOCK, REMOTE_DOOR_UNLOCK, REMOTE_HORN, REMOTE_AIR_CONDITIONING, REMOTE_CHARGE_NOW]:
                     if self.myVehicle:
                         try:
                             if task['Action'] == REMOTE_LIGHT_FLASH:
@@ -321,6 +331,8 @@ class BasePlugin:
                                 Status = asyncio.run(self.myVehicle.remote_services.trigger_remote_door_lock())
                             elif task['Action'] == REMOTE_DOOR_UNLOCK:
                                 Status = asyncio.run(self.myVehicle.remote_services.trigger_remote_door_unlock())
+                            elif task['Action'] == REMOTE_CHARGE_NOW:
+                                Status = asyncio.run(self.myVehicle.remote_services.trigger_charge_now())
                             if Status.state != ExecutionState.EXECUTED:
                                  Domoticz.Error('Error executing remote service {} for {} (not executed).'.format(task['Action'], Parameters['Mode4']))
                         except Exception as err:
@@ -333,12 +345,17 @@ class BasePlugin:
                 else:
                      Domoticz.Error('Invalid task/action name: {}.'.format(task['Action']))
 
-                self.tasksQueue.task_done()
                 Domoticz.Debug('Finished handling task: {}.'.format(task['Action']))
+                self.tasksQueue.task_done()
 
         except Exception as err:
-            self.tasksQueue.task_done()
             Domoticz.Error('General error TaskHandler: {}'.format(err))
+            # For debugging
+            import traceback
+            with open('{}Bmw_traceback.txt'.format(Parameters['HomeFolder']), "a") as myfile:
+                myfile.write('{}'.format(traceback.format_exc()))
+                myfile.write('---------------------------------\n')
+            self.tasksQueue.task_done()
 
     def updateVehicleStatus(self):
 
@@ -365,11 +382,11 @@ class BasePlugin:
 
         # Update Mileage
         UpdateDevice(False, Devices, _UNIT_MILEAGE, self.myVehicle.mileage[0], self.myVehicle.mileage[0])
-        UpdateDevice(False, Devices, _UNIT_MILEAGE_COUNTER, 0, self.myVehicle.mileage[0])
+#        UpdateDevice(False, Devices, _UNIT_MILEAGE_COUNTER, 0, self.myVehicle.mileage[0])
         if self.myVehicle.mileage[1] not in Devices[_UNIT_MILEAGE].Options['Custom']:
             UpdateDeviceOptions(Devices, _UNIT_MILEAGE, Options={'Custom': '0;{}'.format(self.myVehicle.mileage[1])})
-        if self.myVehicle.mileage[1] not in Devices[_UNIT_MILEAGE_COUNTER].Options['ValueUnits']:
-            UpdateDeviceOptions(Devices, _UNIT_MILEAGE_COUNTER, Options={'ValueUnits': self.myVehicle.mileage[1], 'ValueQuantity': self.myVehicle.mileage[1]})
+#        if self.myVehicle.mileage[1] not in Devices[_UNIT_MILEAGE_COUNTER].Options['ValueUnits']:
+#            UpdateDeviceOptions(Devices, _UNIT_MILEAGE_COUNTER, Options={'ValueUnits': self.myVehicle.mileage[1], 'ValueQuantity': self.myVehicle.mileage[1]})
             
         # Update Remaining mileage
         if self.myVehicle.fuel_and_battery.remaining_range_electric != (None, None):
@@ -398,14 +415,15 @@ class BasePlugin:
             UpdateDevice(False, Devices, _UNIT_CHARGING_REMAINING, charging_time_remaining, charging_time_remaining)
 
         # Location of vehicle
-        home_location = Settings['Location'].split(';')
-        self.car_location = (self.myVehicle.vehicle_location.location.latitude, self.myVehicle.vehicle_location.location.longitude)
-        self.distance_from_home = getDistance(self.car_location, (float(home_location[0]), float(home_location[1])))
-        Domoticz.Debug('Distance car-home: {} km'.format(self.distance_from_home))
-        if self.distance_from_home*1000 < self.entering_home_distance:
-            UpdateDevice(False, Devices, _UNIT_HOME, 1, 1)
-        else:
-            UpdateDevice(False, Devices, _UNIT_HOME, 0, 0)
+        if self.myVehicle.vehicle_location.location: #is NULL when car geolocation is not activated
+            home_location = Settings['Location'].split(';')
+            self.car_location = (self.myVehicle.vehicle_location.location.latitude, self.myVehicle.vehicle_location.location.longitude)
+            self.distance_from_home = getDistance(self.car_location, (float(home_location[0]), float(home_location[1])))
+            Domoticz.Debug('Distance car-home: {} km'.format(self.distance_from_home))
+            if self.distance_from_home*1000 < self.entering_home_distance:
+                UpdateDevice(False, Devices, _UNIT_HOME, 1, 1)
+            else:
+                UpdateDevice(False, Devices, _UNIT_HOME, 0, 0)
         
         # Update driving status
         #if self.myVehicle.is_vehicle_active:
