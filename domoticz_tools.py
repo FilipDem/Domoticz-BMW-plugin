@@ -4,25 +4,28 @@
 # Generic helper functions
 ################################################################################
 
-__all__ = ['TIMEDOUT', 'MINUTE', 'DEBUG_OFF', 'DEBUG_ON', \
+__all__ = ['TIMEDOUT', 'MINUTE', 'DEBUG_OFF', 'DEBUG_ON', 'DEBUG_ON_NO_FRAMEWORK',\
            'DumpConfigToLog', \
-           'GetNextFreeUnit', 'FindUnitFromName', 'UpdateDevice', 'UpdateDeviceBatSig', 'TimeoutDevice', 'UpdateDeviceOptions', 'SecondsSinceLastUpdate', \
-           'getConfigItemDB', 'setConfigItemDB', 'getConfigItemFile', 'setConfigItemFile', \
+           'DomoticzAPI', \
+           'GetNextFreeUnit', 'FindUnitFromName', 'FindUnitFromDescription', 'AddTagToDescription', 'GetTagFromDescription', 'UpdateDevice', 'GetDevicesValue', 'GetDevicenValue', 'UpdateDeviceBatSig', 'TimeoutDevice', 'TimeoutDevicesByName', 'UpdateDeviceOptions', 'SecondsSinceLastUpdate', \
+           'getConfigItemDB', 'setConfigItemDB', 'eraseConfigItemDB', 'getConfigItemFile', 'setConfigItemFile', \
            'getCPUtemperature', \
            'FormatWebSocketMessage', 'FormatWebSocketPong', 'FormatWebSocketMessageDisconnect', \
-           'getDistance' \
+           'getDistance', 'Average' \
           ] 
 
 #IMPORTS
 import Domoticz
-import datetime
+from datetime import datetime 
+import json
 import os
 
 #CONSTANTS
-TIMEDOUT = 1         # timeout
-MINUTE = 6           # heartbeat is every 10s
-DEBUG_OFF = 0        # set debug off
-DEBUG_ON = 1         # set debug on
+TIMEDOUT = 1               # timeout
+MINUTE = 6                 # heartbeat is every 10s
+DEBUG_OFF = 0              # set debug off
+DEBUG_ON = 1               # set debug on
+DEBUG_ON_NO_FRAMEWORK= 2   # set debug on but only message by Domoticz.Debug()
 
 #DUMP THE PARAMETER
 def DumpConfigToLog(Parameters, Devices):
@@ -46,11 +49,48 @@ def GetNextFreeUnit(Devices):
     return unit
     
 #GET DEVICE UNIT BY NAME
-def FindUnitFromName(Devices, Parameters, Name):
-    for unit in [Unit for Unit in Devices if Devices[Unit].Name == '{} - {}'.format(Parameters['Name'], Name)]:
+def FindUnitFromName(Devices, Parameters, Name, TruncSubName=False):
+    if TruncSubName:
+        for unit in [Unit for Unit in Devices if Devices[Unit].Name.startswith('{} - {}'.format(Parameters['Name'], Name))]:
+            return unit
+    else:
+        for unit in [Unit for Unit in Devices if Devices[Unit].Name == '{} - {}'.format(Parameters['Name'], Name)]:
+            return unit
+    return False
+
+#GET DEVICE UNIT BY USING THE DESCRIPTION FIELD
+def FindUnitFromDescription(Devices, Parameters, Name):
+    for unit in [Unit for Unit in Devices if GetTagFromDescription(Devices, Unit, 'Name') == '{} - {}'.format(Parameters['Name'], Name)]:
         return unit
     return False
-    
+
+#ADD TAG TO DESCRIPTION OF A DEVICE
+def AddTagToDescription(Devices, Unit, tagName, tag):
+    descriptions = [] if Devices[Unit].Description == '' else [ Devices[Unit].Description ]
+    if 'Do not remove: ' in descriptions[0]:
+        descriptions = descriptions[0].split('; ')
+        for index, description in enumerate(descriptions):
+            if description.startswith('Do not remove: '):
+                Donotremove = json.loads(description[15:])
+                Donotremove[0][tagName] = tag
+                descriptions[index] = 'Do not remove: {}'.format(json.dumps(Donotremove))
+    else: 
+        descriptions += [ 'Do not remove: [{{"{}":"{}"}}]'.format(tagName, tag) ]
+    Devices[Unit].Update(Description='; '.join(descriptions), nValue=Devices[Unit].nValue, sValue=Devices[Unit].sValue)
+
+#GET TAG FROM DESCRIPTION OF A DEVICE
+def GetTagFromDescription(Devices, Unit, tagName):
+    tag = None
+    descriptions = Devices[Unit].Description
+    if 'Do not remove: ' in descriptions:
+        descriptions = descriptions.split('; ')
+        for description in descriptions:
+            if description.startswith('Do not remove: '):
+                Donotremove = json.loads(description[15:])
+                if tagName in Donotremove[0]:
+                    tag = Donotremove[0][tagName]
+    return tag
+     
 #UPDATE THE DEVICE
 def UpdateDevice(AlwaysUpdate, Devices, Unit, nValue, sValue, **kwargs):
     Updated = False
@@ -64,9 +104,21 @@ def UpdateDevice(AlwaysUpdate, Devices, Unit, nValue, sValue, **kwargs):
             Updated = True
         else:
             if not kwargs.get('TimedOut', 0):
-                Devices[Unit].Touch()
+                #Touch() updates the LastSeen property with a new date and timestamp!!
+                #Devices[Unit].Touch()
+                pass
     return Updated
 
+#GET sVALUE OF DEVICE
+def GetDevicesValue(Devices, Unit):
+    if Unit in Devices:
+        return Devices[Unit].sValue
+        
+#GET nVALUE OF DEVICE
+def GetDevicenValue(Devices, Unit):
+    if Unit in Devices:
+        return int(Devices[Unit].nValue)
+        
 #UPDATE THE BATTERY LEVEL AND SIGNAL STRENGTH OF A DEVICE
 def UpdateDeviceBatSig(AlwaysUpdate, Devices, Unit, BatteryLevel=255, SignalLevel=12):
     if Unit in Devices:
@@ -76,9 +128,19 @@ def UpdateDeviceBatSig(AlwaysUpdate, Devices, Unit, BatteryLevel=255, SignalLeve
 def TimeoutDevice(Devices, All=True, Unit=0):
     if All:
         for x in Devices:
-            UpdateDevice(False, Devices, x, Devices[x].nValue, Devices[x].sValue, TimedOut=TIMEDOUT)
+            if not Devices[x].TimedOut:
+                UpdateDevice(False, Devices, x, Devices[x].nValue, Devices[x].sValue, TimedOut=TIMEDOUT)
     else:
-        UpdateDevice(False, Devices, Unit, Devices[Unit].nValue, Devices[Unit].sValue, TimedOut=TIMEDOUT)
+        if not Devices[Unit].TimedOut:
+            UpdateDevice(False, Devices, Unit, Devices[Unit].nValue, Devices[Unit].sValue, TimedOut=TIMEDOUT)
+
+#SET DEVICES ON TIMED-OUT BY USING A TEXT IN THE DEVICE NAME
+def TimeoutDevicesByName(Devices, Name):
+    for x in Devices:
+        if Name in Devices[x].Name:
+            if not Devices[x].TimedOut:
+                UpdateDevice(False, Devices, x, Devices[x].nValue, Devices[x].sValue, TimedOut=TIMEDOUT)
+            return x
 
 #UPDATE THE OPTIONS OF A DEVICE
 def UpdateDeviceOptions(Devices, Unit, Options={}):
@@ -95,15 +157,16 @@ def SecondsSinceLastUpdate(Devices, Unit):
     try:
         timeDiff = datetime.now() - datetime.strptime(Devices[Unit].LastUpdate,'%Y-%m-%d %H:%M:%S')
     except TypeError:
+        import time
         timeDiff = datetime.now() - datetime(*(time.strptime(Devices[Unit].LastUpdate,'%Y-%m-%d %H:%M:%S')[0:6]))
-    return timeDiff
+    return timeDiff.total_seconds()
 
 #GET CONFIGURATION VARIALBE (STORED IN DB)
 def getConfigItemDB(Key=None, Default={}):
     Value = Default
     try:
         Config = Domoticz.Configuration()
-        if (Key != None):
+        if Key != None:
             Value = Config[Key] # only return requested key if there was one
         else:
             Value = Config      # return the whole configuration if no key
@@ -118,10 +181,24 @@ def setConfigItemDB(Key=None, Value=None):
     Config = {}
     try:
         Config = Domoticz.Configuration()
-        if (Key != None):
+        if Key != None:
             Config[Key] = Value
         else:
             Config = Value  # set whole configuration if no key specified
+        Config = Domoticz.Configuration(Config)
+    except Exception as inst:
+        Domoticz.Error('Domoticz.Configuration operation failed: {}'.format(inst))
+    return Config
+
+#ERASE CONFIGURATION VARIALBE (STORED IN DB)
+def eraseConfigItemDB(Key=None):
+    Config = {}
+    try:
+        Config = Domoticz.Configuration()
+        if Key != None:
+            del Config[Key]
+        else:
+            Config.clear()
         Config = Domoticz.Configuration(Config)
     except Exception as inst:
         Domoticz.Error('Domoticz.Configuration operation failed: {}'.format(inst))
@@ -189,7 +266,7 @@ def getCPUtemperature():
     
 #CALCULATE DISTANCE BASED ON GPS COORDINATES
 from math import radians, sin, cos, atan2, sqrt
-def getDistance(origin, destination):
+def getDistance(origin, destination, unit='km'):
     radius = 6371 # km
 
     dlat = radians(destination[0]-origin[0])
@@ -199,5 +276,47 @@ def getDistance(origin, destination):
     c = 2 * atan2(sqrt(a), sqrt(1-a))
     d = radius * c
 
-    return d
+    return d*1000 if unit=='m' else d
 
+#CALCULATE AVERAGE
+def Average(mylist):
+    tot = 0
+    nbr = 0
+    for el in mylist:
+        if type(el) == int or type(el) == float:
+            tot += el
+            nbr += 1
+    if nbr:
+        return tot/nbr
+    else:
+        return None
+
+#CALL DOMOTICZ API    
+def DomoticzAPI(Parameters, APICall):
+    from urllib import parse, request
+    import base64
+
+    resultJson = None
+    url = 'http://{}:{}/json.htm?{}'.format(Parameters['Address'], Parameters['Port'], parse.quote(APICall, safe='&='))
+
+    try:
+        req = request.Request(url)
+        if Parameters["Username"]:
+            credentials = ('{}:{}'.format(Parameters['Username'], Parameters['Password']))
+            encoded_credentials = base64.b64encode(credentials.encode('ascii'))
+            req.add_header('Authorization', 'Basic {}'.format(encoded_credentials.decode('ascii')))
+
+        Domoticz.Debug('Sending DomoticzAPI: {}'.format(url))
+        response = request.urlopen(req)
+        Domoticz.Debug('Receiving status code DomoticzAPI: {}'.format(response.status))
+        if response.status == 200:
+            resultJson = json.loads(response.read().decode('utf-8'))
+            if resultJson['status'] != 'OK':
+                Domoticz.Error("Domoticz API returned an error: status = {}".format(resultJson["status"]))
+                resultJson = None
+        else:
+            Domoticz.Error("Domoticz API: http error = {}".format(response.status))
+    except:
+        Domoticz.Error("Error calling '{}'".format(url))
+
+    return resultJson
