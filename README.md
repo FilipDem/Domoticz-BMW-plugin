@@ -16,6 +16,7 @@ Domoticz plugin working with BMW Connected Drive. A big changes is introduced si
 * From plugin 3.0.0, the plugin uses bimmer_connected (https://github.com/bimmerconnected/bimmer_connected) in threading mode. It solves the problem with the vehicle status update by adding a workaround in the plugin.
 * From plugin 3.1.0 (still working on it), all functionality is used from the bimmer_connected library without specific code as workaround. Minimal version of the bimmer_connected library is 0.8.0.
 * From plugin 3.2.0, there is the need to install at least bimmer_connected library 0.9.0.0b17. Be aware that this library contains some compatibility breaking changes that impacted the plugin (eg using the Asyncio python mechanism). At the time of the update of the BMW plugin version 0.9.0.0b17 is still beta version.
+* From plugin 3.5.0, there is the need to install at least bimmer_connected library 0.17.0. BMW implemented a CAPTCHA at login requireing this library version. Due to this change the plugin is slightly reworked, meaning that the hardware settings requires to be reset.
 
 It is highly considered to follow the bimmer_connected evolutions on https://github.com/bimmerconnected/bimmer_connected as BMW is highly refactoring. You can also find more information about the supported cars (and functionality). Not all functionality is backported to Domoticz (yet). If there is an interesting functionality to add, let me know.
 
