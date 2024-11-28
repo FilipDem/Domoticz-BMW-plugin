@@ -10,18 +10,28 @@
 # Including the threading...
 #
 """
-<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="3.2.2">
+<plugin key="Bmw" name="Bmw" author="Filip Demaertelaere" version="3.5.0">
+    <description>
+        <h2>Introduction</h2>
+        The BMW Plugin is based on the <a href="https://github.com/bimmerconnected/bimmer_connected">bimmer_connected python API</a>.<br/>
+        Be sure the bimmer_connected python library is installed before using the plugin and you have a MyBMW account<br/>
+        and corresponding credentials (username/password).<br/>
+        The required Captcha can be calculated on <a href="https://bimmer-connected.readthedocs.io/en/stable/captcha.html">https://bimmer-connected.readthedocs.io/en/stable/captcha.html</a>.<br/>
+        Keep in mind that the Captcha has a limited validity and needs to be regenerated at plugin restart when requested.<br/>
+        <br/><br/>
+    </description>
     <params>
-        <param field="Mode2" label="Username" width="200px" required="true" default=""/>
-        <param field="Mode3" label="Password" width="200px" required="true" default="" password="true"/>
-        <param field="Mode4" label="VIN" width="200px" required="true" default=""/>
-        <param field="Mode1" label="Region" width="120px" required="true">
+        <param field="Username" label="Username" width="200px" required="true" default=""/>
+        <param field="Password" label="Password" width="200px" required="true" default="" password="true"/>
+        <param field="Mode1" label="VIN" width="200px" required="true" default=""/>
+        <param field="Mode2" label="Region" width="120px" required="true">
             <options>
                 <option label="Rest Of World" value="rest_of_world"/>
                 <option label="North America" value="north_america"/>
                 <option label="China" value="china" default="Rest Of World"/>
             </options>
         </param>
+        <param field="Mode3" label="Captcha" width="200px" required="true" default=""/>
         <param field="Mode5" label="Minutes between update" width="120px" required="true" default="5"/>
         <param field="Mode6" label="Debug" width="120px">
             <options>
@@ -50,6 +60,7 @@ import asyncio #inspired on https://www.domoticz.com/forum/viewtopic.php?f=65&p=
 from bimmer_connected.account import MyBMWAccount
 from bimmer_connected.api.regions import get_region_from_name
 from bimmer_connected.vehicle.remote_services import ExecutionState
+from bimmer_connected.models import MyBMWCaptchaMissingError
 
 #DEVICES TO CREATE
 _UNIT_MILEAGE = 1
@@ -90,18 +101,19 @@ class BasePlugin:
         self.runAgain = MINUTE
         self.errorLevel = 0
         self.myBMW = None
-        self.region = REGIONS[0]
+        self.captcha_required = False
         self.myVehicle = None
         self.last_car_opened_time = datetime.datetime.now()
         self.car_opened_status_given = False
         self.car_location = (None, None)
+        self.error_location_generated = False
         self.last_car_location = (None, None)
         self.distance_from_home = 0
         self.entering_home_distance = 1000
         self.entering_home_distance_fast_polling_distance = 2000
         self.entering_home_distance_fast_polling_delay = 2
         self.tasksQueue = queue.Queue()
-        self.tasksThread = threading.Thread(name='QueueThread', target=BasePlugin.handleTasks, args=(self,))
+        self.tasksThread = None
 
     def onStart(self):
         Domoticz.Debug('onStart called')
@@ -123,10 +135,6 @@ class BasePlugin:
             self.entering_home_distance_fast_polling_delay = config['EnteringHomeDistance_FastPollingDelay (min)']
         except:
             pass
-
-        # Check region (especially because of updating from previous version
-        if Parameters['Mode1'] in REGIONS:
-            self.region = Parameters['Mode1']
 
         # Check if images are in database
         if _IMAGE not in Images:
@@ -162,9 +170,9 @@ class BasePlugin:
         TimeoutDevice(Devices, All=True)
 
         # Create BMW instance
+        self.tasksThread = threading.Thread(name='QueueThread', target=BasePlugin.handleTasks, args=(self,))
         self.tasksThread.start()
         self.tasksQueue.put({'Action': 'Login'})
-        self.tasksQueue.put({'Action': 'StatusUpdate'})
 
     def onStop(self):
         Domoticz.Debug('onStop called - Threads still active: {} (should be 1 = {})'.format(threading.active_count(), threading.current_thread().name))
@@ -210,9 +218,7 @@ class BasePlugin:
                     self.tasksQueue.put({'Action': REMOTE_CHARGE_NOW})
 
     def onNotification(self, Name, Subject, Text, Status, Priority, Sound, ImageFile):
-        Domoticz.Debug('Notification: {}, {}, {}, {}, {}, {}, {}'.format(
-            Name, Subject, Text, Status, Priority, Sound, ImageFile
-        ))
+        Domoticz.Debug('Notification: {}, {}, {}, {}, {}, {}, {}'.format(Name, Subject, Text, Status, Priority, Sound, ImageFile))
 
     def onDisconnect(self, Connection):
         Domoticz.Debug('onDisconnect called ({})'.format(Connection.Name))
@@ -223,10 +229,10 @@ class BasePlugin:
 
         # Check if car is locked
         if int(Devices[_UNIT_CAR].nValue) and not self.car_opened_status_given and datetime.datetime.now()-self.last_car_opened_time>datetime.timedelta(minutes=60):
-            Domoticz.Status('ATTTENTION: Car is not closed since {}!!'.format(self.last_car_opened_time))
+            Domoticz.Status('ATTENTION: Car is not closed since {}!!'.format(self.last_car_opened_time))
             self.car_opened_status_given = True
 
-        if self.runAgain <= 0:
+        if self.runAgain <= 0 and not self.captcha_required:
 
             if self.myBMW == None:
                 self.tasksQueue.put({'Action': 'Login'})
@@ -238,10 +244,10 @@ class BasePlugin:
                 self.runAgain = MINUTE*self.entering_home_distance_fast_polling_delay
             
             # If no correct communication in some trials...
-            if self.errorLevel == 5:
-                Domoticz.Error('Too many errors received: devices are timedout!')
+            if self.errorLevel == 3:
                 TimeoutDevice(Devices, All=True)
-                self.myBMW = None
+                self.runAgain = 2*MINUTE*int(Parameters['Mode5'])
+                Domoticz.Error('Too many errors received: devices are timedout! No updates will be done anymore and retry rate will be slowed down...')
 
     def handleTasks(self):
         try:
@@ -256,66 +262,112 @@ class BasePlugin:
                         loop.close()
                     except:
                         pass
-                    self.MyBMW = None
+                    self.myBMW = None
                     self.myVehicle = None
                     self.tasksQueue.task_done()
                     break
 
                 Domoticz.Debug('Handling task: {}.'.format(task['Action']))
                 if task['Action'] == 'Login':
-                    self.myVehicle = None
+                    # Try to login into myBMW
                     try:
-                        self.myBMW = MyBMWAccount(Parameters['Mode2'], Parameters['Mode3'], get_region_from_name(self.region))
-                        Domoticz.Debug('Login done! MyBMW object: {}'.format(self.myBMW))
+                        # First look for stored refresh_token
+                        gcid = getConfigItemDB(Key='gcid', Default=None)
+                        refresh_token = getConfigItemDB(Key='refresh_token', Default=None)
+
+                        # Create MyBMWAccount object (this does not login/connect to the BMW API)
+                        if all([gcid, refresh_token]):
+                            # Use the refresh_token
+                            self.myBMW = MyBMWAccount(Parameters['Username'], Parameters['Password'], get_region_from_name(Parameters['Mode2'])) 
+                            if refresh_token and gcid:
+                                self.myBMW.set_refresh_token(refresh_token, gcid) 
+                            self.captcha_required = False
+                        else:
+                            # No refresh_token, captcha is required
+                            self.myBMW = MyBMWAccount(Parameters['Username'], Parameters['Password'], get_region_from_name(Parameters['Mode2']), hcaptcha_token=Parameters['Mode3'])
+                            self.captcha_required = True
+                        Domoticz.Debug('myBMW object created (no connection to the BMW API yet!): {}'.format(self.myBMW))
+
+                        # Connect to the BMW API
                         if self.myBMW:
                             asyncio.run(self.myBMW.get_vehicles())
+
+                    except MyBMWCaptchaMissingError:
+                        Domoticz.Error('New login with CAPTCHA required for user {}. Update the hardware settings page with an updated valid CAPTCHA.'.format(Parameters['Username']))
+                        self.captcha_required = True
+                        self.myBMW = None
+                        TimeoutDevice(Devices, All=True)
+
+                    # Login error
                     except Exception as err:
-                        Domoticz.Error('Error login in MyBMW for user {} and region {}.'.format(Parameters['Mode2'], self.region))
-                        Domoticz.Debug('Login error: {}'.format(err))
-                        import traceback
-                        Domoticz.Debug('Login error TRACEBACK: {}'.format(traceback.format_exc()))
-                        with open('{}Bmw_traceback.txt'.format(Parameters['HomeFolder']), "w") as myfile:
-                            myfile.write('{}'.format(traceback.format_exc()))
-                            myfile.write('---------------------------------\n')
+                        Domoticz.Error('Error login in myBMW for user {}. Be sure a valid CAPTCHA is supplied in the hardware settings! ({}).'.format(Parameters['Username'], err))
+                        self.captcha_required = True
                         self.myBMW = None
                         self.errorLevel += 1
+
+                    # Successful login
                     else:
-                        self.myVehicle = self.myBMW.get_vehicle(Parameters['Mode4'])
+                        # Store gcid and/or refresh_token in required
+                        Domoticz.Debug('Authentication tokens: Refresh token={}; gcid={}'.format(self.myBMW.refresh_token, self.myBMW.gcid))
+                        if gcid != self.myBMW.gcid:
+                            setConfigItemDB(Key='gcid', Value=self.myBMW.gcid)
+                        if refresh_token != self.myBMW.refresh_token:
+                            setConfigItemDB(Key='refresh_token', Value=self.myBMW.refresh_token)
+
+                        # Read vehicle data (VIN)
+                        self.myVehicle = self.myBMW.get_vehicle(Parameters['Mode1'])
                         if self.myVehicle:
-                            Domoticz.Status('Login successful! Car {} (VIN:{}) found!'.format(self.myVehicle.name, Parameters['Mode4']))
+                            Domoticz.Status('Login successful! BMW {} and VIN {} found! Updating the status...'.format(self.myVehicle.name, Parameters['Mode1']))
                             self.updateVehicleStatus()
                         else:
-                            Domoticz.Error('vin {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
+                            Domoticz.Error('BMW with VIN {} not found for user {}.'.format(Parameters['Mode1'], Parameters['Username']))
                             TimeoutDevice(Devices, All=True)
 
                 elif task['Action'] == 'StatusUpdate':
                     if self.myBMW:
-                        self.myVehicle = None
+                        # Get "old" refresh_token
+                        refresh_token = self.myBMW.refresh_token
+
+                        # Connect to the BMW API using the credentials in the myBMW object
                         try:
                             asyncio.run(self.myBMW.get_vehicles())
-                        except RuntimeError: # WORKAROUND FOR https://github.com/bimmerconnected/bimmer_connected/issues/430
-                            import traceback
-                            Domoticz.Debug('Workaround error TRACEBACK: {}'.format(traceback.format_exc()))
-                            with open('{}Bmw_traceback.txt'.format(Parameters['HomeFolder']), "w") as myfile:
-                                myfile.write('{}'.format(traceback.format_exc()))
-                                myfile.write('---------------------------------\n')
+
+                        # WORKAROUND FOR https://github.com/bimmerconnected/bimmer_connected/issues/430
+                        except RuntimeError:
                             self.myBMW = None
                             if not self.errorLevel:
                                 Domoticz.Log('Error occured in getting the status update of the BMW - activating workaround.')
                             self.errorLevel += 1
-                        except:
+
+                        # Captcha required
+                        except MyBMWCaptchaMissingError:
+                            Domoticz.Error('New login with CAPTCHA required for user {}. Update the hardware settings page with an updated valid CAPTCHA.'.format(Parameters['Username']))
+                            self.captcha_required = True
+                            eraseConfigItemDB() # remove the authentication tokens to force use of captcha for creation of the myBMW object
+                            TimeoutDevice(Devices, All=True)
+
+                        # Something went wrong
+                        except Exception as err:
                             if not self.errorLevel:
-                                Domoticz.Log('Error occured in getting the status update of the BMW.')
+                                Domoticz.Log('Error occured in getting the status update of the BMW ({}).'.format(err))
                             self.errorLevel += 1
+
+                        # New information from BMW API received
                         else:
-                            self.myVehicle = self.myBMW.get_vehicle(Parameters['Mode4'])
+                            # Update refresh_token in storage if a new one is received
+                            Domoticz.Debug('Authentication tokens: Refresh token={}; gcid={}'.format(self.myBMW.refresh_token, self.myBMW.gcid))
+                            if refresh_token != self.myBMW.refresh_token:
+                                setConfigItemDB(Key='refresh_token', Value=self.myBMW.refresh_token)
+
+                            # Get the data of the vehicle VIN
+                            self.myVehicle = self.myBMW.get_vehicle(Parameters['Mode1'])
                             if self.myVehicle:
                                 Domoticz.Debug('Car {} found after update!'.format(self.myVehicle.name))
                                 self.updateVehicleStatus()
                                 self.errorLevel = 0
                             else:
                                 if not self.errorLevel:
-                                    Domoticz.Log('BMW with VIN {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
+                                    Domoticz.Log('BMW with VIN {} not found for user {}.'.format(Parameters['Mode1'], Parameters['Username']))
                                 self.errorLevel += 1
                             
                 elif task['Action'] in [REMOTE_LIGHT_FLASH, REMOTE_DOOR_LOCK, REMOTE_DOOR_UNLOCK, REMOTE_HORN, REMOTE_AIR_CONDITIONING, REMOTE_CHARGE_NOW]:
@@ -336,7 +388,7 @@ class BasePlugin:
                             if Status.state != ExecutionState.EXECUTED:
                                  Domoticz.Error('Error executing remote service {} for {} (not executed).'.format(task['Action'], Parameters['Mode4']))
                         except Exception as err:
-                            Domoticz.Error('Error executing remote service {} for {} (unknown error).'.format(task['Action'], Parameters['Mode4']))
+                            Domoticz.Error('Error executing remote service {} for {} ({}).'.format(task['Action'], Parameters['Mode4'], err))
                             Domoticz.Debug('Remote service error: {}'.format(err))
                     else:
                         Domoticz.Error('BMW with VIN {} not found for user {}.'.format(Parameters['Mode4'], Parameters['Mode2']))
@@ -353,6 +405,7 @@ class BasePlugin:
             # For debugging
             import traceback
             with open('{}Bmw_traceback.txt'.format(Parameters['HomeFolder']), "a") as myfile:
+                myfile.write('-General Error-{}------------------\n'.format(datetime.datetime.now()))
                 myfile.write('{}'.format(traceback.format_exc()))
                 myfile.write('---------------------------------\n')
             self.tasksQueue.task_done()
@@ -410,11 +463,15 @@ class BasePlugin:
             UpdateDevice(False, Devices, _UNIT_BAT_LEVEL, self.myVehicle.fuel_and_battery.remaining_battery_percent, self.myVehicle.fuel_and_battery.remaining_battery_percent)
 
         # Update Charging Time (minutes)
+        Domoticz.Debug('Remaining charging time: {}'.format(self.myVehicle.fuel_and_battery.charging_end_time))
         if self.myVehicle.fuel_and_battery.charging_end_time:
             charging_time_remaining = max(0, round((self.myVehicle.fuel_and_battery.charging_end_time.astimezone(pytz.utc)-self.myVehicle.timestamp.replace(tzinfo=datetime.timezone.utc)).total_seconds()/60, 2))
             UpdateDevice(False, Devices, _UNIT_CHARGING_REMAINING, charging_time_remaining, charging_time_remaining)
+        else:
+            UpdateDevice(False, Devices, _UNIT_CHARGING_REMAINING, 0, 0)
 
         # Location of vehicle
+        Domoticz.Debug('Location of vehicle: {}'.format(self.myVehicle.vehicle_location))
         if self.myVehicle.vehicle_location.location: #is NULL when car geolocation is not activated
             home_location = Settings['Location'].split(';')
             self.car_location = (self.myVehicle.vehicle_location.location.latitude, self.myVehicle.vehicle_location.location.longitude)
@@ -424,6 +481,11 @@ class BasePlugin:
                 UpdateDevice(False, Devices, _UNIT_HOME, 1, 1)
             else:
                 UpdateDevice(False, Devices, _UNIT_HOME, 0, 0)
+            self.error_location_generated = False
+        else:
+            if not self.error_location_generated:
+                Domoticz.Status('Location of car {} cannot be retrieved. Home/Driving device will not be updated!!'.format(self.myVehicle.name))
+                self.error_location_generated = True
         
         # Update driving status
         #if self.myVehicle.is_vehicle_active:
@@ -477,3 +539,4 @@ def onHeartbeat():
 ################################################################################
 # Specific helper functions
 ################################################################################
+

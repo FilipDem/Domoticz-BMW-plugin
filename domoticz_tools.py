@@ -7,7 +7,7 @@
 __all__ = ['TIMEDOUT', 'MINUTE', 'DEBUG_OFF', 'DEBUG_ON', 'DEBUG_ON_NO_FRAMEWORK',\
            'DumpConfigToLog', \
            'DomoticzAPI', \
-           'GetNextFreeUnit', 'FindUnitFromName', 'FindUnitFromDescription', 'AddTagToDescription', 'GetTagFromDescription', 'UpdateDevice', 'GetDevicesValue', 'GetDevicenValue', 'UpdateDeviceBatSig', 'TimeoutDevice', 'TimeoutDevicesByName', 'UpdateDeviceOptions', 'SecondsSinceLastUpdate', \
+           'GetNextFreeUnit', 'FindUnitFromName', 'FindUnitFromDescription', 'AddTagToDescription', 'GetTagFromDescription', 'UpdateDevice', 'GetDevicesValue', 'GetDevicenValue', 'UpdateDeviceBatSig', 'TimeoutDevice', 'TimeoutDevicesByName', 'UpdateDeviceOptions', 'SecondsSinceLastUpdate', 'DateStringtoDateTime', \
            'getConfigItemDB', 'setConfigItemDB', 'eraseConfigItemDB', 'getConfigItemFile', 'setConfigItemFile', \
            'getCPUtemperature', \
            'FormatWebSocketMessage', 'FormatWebSocketPong', 'FormatWebSocketMessageDisconnect', \
@@ -99,7 +99,7 @@ def UpdateDevice(AlwaysUpdate, Devices, Unit, nValue, sValue, **kwargs):
         default_kwargs = { 'TimedOut': 0 }
         kwargs = { **default_kwargs, **kwargs }
         if AlwaysUpdate or Devices[Unit].nValue != int(nValue) or Devices[Unit].sValue != str(sValue) or Devices[Unit].TimedOut != kwargs['TimedOut'] or len(kwargs)>1:
-            Domoticz.Debug('Update {}: nValue {} - sValue {} - Other: {}'.format(Devices[Unit].Name, nValue, sValue, kwargs))
+            #Domoticz.Debug('Update {}: nValue {} - sValue {} - Other: {}'.format(Devices[Unit].Name, nValue, sValue, kwargs))
             Devices[Unit].Update(nValue=int(nValue), sValue=str(sValue), **kwargs)
             Updated = True
         else:
@@ -153,13 +153,18 @@ def UpdateDeviceOptions(Devices, Unit, Options={}):
 
 #GET THE SECONDS SINCE THE LASTUPDATE
 def SecondsSinceLastUpdate(Devices, Unit):
+    timeDiff = datetime.now() - DateStringtoDateTime(Devices[Unit].LastUpdate)
+    return timeDiff.total_seconds()
+
+#CONVERT STRING IN FORMAT %Y-%m-%d %H:%M:%S TO DATETIME OBJECT
+def DateStringtoDateTime(DateStr):
     # try/catch due to http://bugs.python.org/issue27400
     try:
-        timeDiff = datetime.now() - datetime.strptime(Devices[Unit].LastUpdate,'%Y-%m-%d %H:%M:%S')
+        Datim = datetime.strptime(DateStr,'%Y-%m-%d %H:%M:%S')
     except TypeError:
         import time
-        timeDiff = datetime.now() - datetime(*(time.strptime(Devices[Unit].LastUpdate,'%Y-%m-%d %H:%M:%S')[0:6]))
-    return timeDiff.total_seconds()
+        Datim = datetime(*(time.strptime(DateStr,'%Y-%m-%d %H:%M:%S')[0:6]))
+    return Datim
 
 #GET CONFIGURATION VARIALBE (STORED IN DB)
 def getConfigItemDB(Key=None, Default={}):
@@ -320,3 +325,6 @@ def DomoticzAPI(Parameters, APICall):
         Domoticz.Error("Error calling '{}'".format(url))
 
     return resultJson
+
+
+
