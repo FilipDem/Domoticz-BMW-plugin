@@ -17,6 +17,7 @@ Domoticz plugin working with BMW Connected Drive. A big changes is introduced si
 * From plugin 3.1.0 (still working on it), all functionality is used from the bimmer_connected library without specific code as workaround. Minimal version of the bimmer_connected library is 0.8.0.
 * From plugin 3.2.0, there is the need to install at least bimmer_connected library 0.9.0.0b17. Be aware that this library contains some compatibility breaking changes that impacted the plugin (eg using the Asyncio python mechanism). At the time of the update of the BMW plugin version 0.9.0.0b17 is still beta version.
 * From plugin 3.5.0, there is the need to install at least bimmer_connected library 0.17.0. BMW implemented a CAPTCHA at login requireing this library version. Due to this change the plugin is slightly reworked, meaning that the hardware settings requires to be reset.
+* From plugin 4.0.0, the plugin is completely refactored. It relies also on the Domoticz Extended Plugin framework now (hence using a new toolset DomoticzEx_tools.py). When moving to this version of the plugin, it will create new devices due to the use of DeviceID functionality of the Extended Plugin framework. Using the GUI functionality to replace devices is a perfect solution to avoid losing historical data, scripting functionality etc. It is highly recommended to take a backup before moving to the new version. As I don't have access to various models of cars, I was not able to test in all circumstances.
 
 It is highly considered to follow the bimmer_connected evolutions on https://github.com/bimmerconnected/bimmer_connected as BMW is highly refactoring. You can also find more information about the supported cars (and functionality). Not all functionality is backported to Domoticz (yet). If there is an interesting functionality to add, let me know.
 
@@ -26,7 +27,7 @@ Currently it supports the keep track of the following information:
 * Home (indicates whether the car is located within a defined area)
 * Doors, windows and car: open - closed
 * Remaining mileage for fuel and electric
-* Remote services: flash light, horn, activate airco/heating, lock/unlock car (in case you installed a previous version without all these remote services, delete first the device in Domoticz, it will be recreated with all features afterwards)
+* Remote services: flash light, horn, activate airco/heating, lock/unlock car, start/stop charging (in case you installed a previous version without all these remote services, delete first the device in Domoticz, it will be recreated with all features afterwards)
 * In case of electric support:
     * Charging status
     * Remaining charging time (working again as from version 3.1.0)
