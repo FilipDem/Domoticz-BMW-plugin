@@ -8,11 +8,11 @@ It uses the bimmerconnected library to fetch data from BMW's API and creates
 corresponding devices in Domoticz.
 
 Author: Filip Demaertelaere
-Version: 4.0.0
+Version: 4.0.1
 License: MIT
 """
 """
-<plugin key="Bmw" name="BMW ConnectedDrive" author="Filip Demaertelaere" version="4.0.0">
+<plugin key="Bmw" name="BMW ConnectedDrive" author="Filip Demaertelaere" version="4.0.1">
     <description>
         <h2>Introduction</h2>
         <p>The BMW ConnectedDrive plugin for Domoticz offers a robust and seamless integration with your BMW vehicle, transforming your home automation system into a comprehensive command center for your car. This plugin leverages the capabilities of the open-source <a href="https://github.com/bimmerconnected/bimmer_connected">bimmer_connected Python API</a>, providing real-time data monitoring and remote control functionalities. By bridging the gap between your vehicle's advanced telematics and your smart home environment, it empowers users with unprecedented control and insight.</p>
@@ -354,7 +354,7 @@ def handle_bmw_errors(func: Callable) -> Callable:
         except MyBMWCaptchaMissingError:
             Domoticz.Debug(f"New login with CAPTCHA required with user {Parameters['Username']}.")
             self.captcha_required = True
-            erase_config_item_db(Key='oauth')  # Remove authentication tokens to force use of captcha
+            erase_config_item_db(key='oauth')  # Remove authentication tokens to force use of captcha
             self.my_bmw = None
             timeout_device(Devices)
             return False
