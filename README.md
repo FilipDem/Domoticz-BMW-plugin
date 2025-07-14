@@ -14,10 +14,14 @@ The QR codes comply the EPC069-12 European Standard for SEPA Credit Transfers ([
 Domoticz plugin working with BMW Connected Drive. A big changes is introduced since version 2.0.0 of the plugin. BMW discontinued the BMW Connected Drive App and related services. 
 * From plugin 2.0.0, the new services based on the MyBMW app are integrated. This version does not work anymore due to changes at the server side of BMW. The status of the vehicle cannot longer be retrieved.
 * From plugin 3.0.0, the plugin uses bimmer_connected (https://github.com/bimmerconnected/bimmer_connected) in threading mode. It solves the problem with the vehicle status update by adding a workaround in the plugin.
-* From plugin 3.1.0 (still working on it), all functionality is used from the bimmer_connected library without specific code as workaround. Minimal version of the bimmer_connected library is 0.8.0.
+* From plugin 3.1.0  all functionality is used from the bimmer_connected library without specific code as workaround. Minimal version of the bimmer_connected library is 0.8.0.
 * From plugin 3.2.0, there is the need to install at least bimmer_connected library 0.9.0.0b17. Be aware that this library contains some compatibility breaking changes that impacted the plugin (eg using the Asyncio python mechanism). At the time of the update of the BMW plugin version 0.9.0.0b17 is still beta version.
 * From plugin 3.5.0, there is the need to install at least bimmer_connected library 0.17.0. BMW implemented a CAPTCHA at login requireing this library version. Due to this change the plugin is slightly reworked, meaning that the hardware settings requires to be reset.
 * From plugin 4.0.0, the plugin is completely refactored. It relies also on the Domoticz Extended Plugin framework now (hence using a new toolset DomoticzEx_tools.py). When moving to this version of the plugin, it will create new devices due to the use of DeviceID functionality of the Extended Plugin framework. Using the GUI functionality to replace devices is a perfect solution to avoid losing historical data, scripting functionality etc. It is highly recommended to take a backup before moving to the new version. As I don't have access to various models of cars, I was not able to test in all circumstances.
+* From plugin 4.0.0 there is a few functionality added:
+   * Charging can now be started immediately by clicking the "Charging" device. The "charge_now" option in the "Remote Services" is still working.
+   * Possibility to restrict the charging capacity from Domoticz, including synchronization with BMW Connected Drive
+   * Possibility to change the charging mode from Domoticz, including synchronization with BMW Connected Drive (mode "Unknown" can technically be selected, but has the same behavior as "no action").
 
 It is highly considered to follow the bimmer_connected evolutions on https://github.com/bimmerconnected/bimmer_connected as BMW is highly refactoring. You can also find more information about the supported cars (and functionality). Not all functionality is backported to Domoticz (yet). If there is an interesting functionality to add, let me know.
 
@@ -32,6 +36,8 @@ Currently it supports the keep track of the following information:
     * Charging status
     * Remaining charging time (working again as from version 3.1.0)
     * Battery level
+    * Charging limits
+    * Charging mode
 
 If there are requests to integrate other information/functions, please leave a message.
 
