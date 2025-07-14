@@ -88,14 +88,15 @@ def update_device(
     Returns:
         bool: True if the device was updated, False otherwise
     """
-    Domoticz.Debug(f'Update device with AlwaysUpdate={always_update}; DeviceID={device_id}; Unit={unit}; nValue={n_value}; sValue={s_value}')
-    
     # Default update flags
     _update_standard = _update_properties = _update_options = False
     
     # Get device and unit if they exist
     if not (device := devices.get(device_id)) or not (unit_obj := device.Units.get(unit)):
+        Domoticz.Debug(f'Device with DeviceID/Unit {device_id}/{unit} does not exist... No update done...')
         return False
+
+    Domoticz.Debug(f'Update device with AlwaysUpdate={always_update}; DeviceID={device_id}; Unit={unit}; nValue={n_value}; sValue={s_value}')
         
     # Use current values if new ones not provided
     n_value = unit_obj.nValue if n_value is None else n_value
@@ -252,7 +253,9 @@ def get_unit(devices: DeviceCollection, device_id: str, unit: int) -> Any:
     Returns:
         Any: The unit object or None if not found
     """
-    return devices.get(device_id, {}).Units.get(unit)
+    if (device := devices.get(device_id)) and (unit_obj := device.Units.get(unit)):
+        return unit_obj
+    return None
 
 
 def seconds_since_last_update(devices: DeviceCollection, device_id: str, unit: int) -> Optional[float]:
@@ -457,6 +460,21 @@ def domoticz_api(parameters: Dict[str, str], params: Dict[str, Any]) -> Optional
 
     return None
 
+def log_backtrace_error(parameters: Dict[str, str]) -> None:
+    """
+    Write the backtrace to a logfile on disk.
+    Args:
+        parameters: Plugin parameters including address, port, username, password
+    """
+    # For debugging
+    import traceback
+    from pathlib import Path
+    log_path = Path(parameters['HomeFolder']) / f"{parameters['Name']}_traceback.txt"
+    with log_path.open("a") as myfile:
+        myfile.write(f'-General Error-{datetime.now()}------------------\n')
+        myfile.write(f'{traceback.format_exc()}')
+        myfile.write('---------------------------------\n')
+
 
 # Constants for backward compatibility
 TIMEDOUT = DomoticzConstants.TIMEDOUT
@@ -489,6 +507,7 @@ __all__ = [
     'get_device_n_value', 'get_unit', 'seconds_since_last_update',
     'date_string_to_datetime', 'get_config_item_db', 'set_config_item_db',
     'erase_config_item_db', 'get_distance', 'average', 'domoticz_api',
+    'log_backtrace_error',
     
     # Aliases for backward compatibility
     'DumpConfigToLog', 'UpdateDevice', 'TimeoutDevice',

@@ -8,15 +8,15 @@ It uses the bimmerconnected library to fetch data from BMW's API and creates
 corresponding devices in Domoticz.
 
 Author: Filip Demaertelaere
-Version: 4.0.1
+Version: 4.1.0
 License: MIT
 """
 """
-<plugin key="Bmw" name="BMW ConnectedDrive" author="Filip Demaertelaere" version="4.0.1">
+<plugin key="Bmw" name="BMW ConnectedDrive" author="Filip Demaertelaere" version="4.1.0">
     <description>
         <h2>Introduction</h2>
         <p>The BMW ConnectedDrive plugin for Domoticz offers a robust and seamless integration with your BMW vehicle, transforming your home automation system into a comprehensive command center for your car. This plugin leverages the capabilities of the open-source <a href="https://github.com/bimmerconnected/bimmer_connected">bimmer_connected Python API</a>, providing real-time data monitoring and remote control functionalities. By bridging the gap between your vehicle's advanced telematics and your smart home environment, it empowers users with unprecedented control and insight.</p>
-        <p>Upon successful configuration, the plugin creates a suite of virtual devices within Domoticz, representing key aspects of your BMW's status, including mileage, door and window lock states, fuel and electric range, charging status, and even the vehicle's location and movement. Beyond passive monitoring, it enables active management through remote services such as locking/unlocking doors, flashing lights, sounding the horn, activating air conditioning, and initiating charging, all directly from the Domoticz interface.</p>
+        <p>Upon successful configuration, the plugin creates a suite of virtual devices within Domoticz, representing key aspects of your BMW's status, including mileage, door and window lock states, fuel and electric range, charging status, and even the vehicle's location and movement. Beyond passive monitoring, it enables active management through remote services such as locking/unlocking doors, flashing lights, sounding the horn, activating air conditioning, initiating charging, setting the AC charging limitation and charging profile, all directly from the Domoticz interface.</p>
         <p>To ensure optimal performance and security, this plugin requires a valid MyBMW account with corresponding credentials (username and password). Furthermore, the BMW API often necessitates a CAPTCHA token for initial authentication or re-authentication. Users can generate this token by visiting the official `bimmer_connected` documentation at <a href="https://bimmer-connected.readthedocs.io/en/stable/captcha.html">https://bimmer-connected.readthedocs.io/en/stable/captcha.html</a>. It is crucial to note that these CAPTCHA tokens possess a limited validity period, necessitating regeneration and re-entry in the plugin's configuration should authentication failures occur or upon plugin restarts.</p>
         <p>The plugin is designed with flexibility in mind, offering configurable polling intervals to balance data freshness with API usage, along with comprehensive debug options to assist with troubleshooting and optimization. This makes the BMW ConnectedDrive plugin an invaluable tool for any BMW owner looking to enhance their smart home ecosystem.</p>
         <br/>
@@ -101,14 +101,15 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import DomoticzEx as Domoticz
 from domoticzEx_tools import (
     DomoticzConstants, dump_config_to_log, update_device, timeout_device,
-    get_device_n_value, get_unit, set_config_item_db, get_config_item_db, erase_config_item_db,
-    get_distance
+    get_device_n_value, get_device_s_value, get_unit, set_config_item_db,
+    get_config_item_db, erase_config_item_db, get_distance, log_backtrace_error
 )
 
 # BMW API related imports
 from bimmer_connected.account import MyBMWAccount
 from bimmer_connected.api.regions import get_region_from_name
 from bimmer_connected.vehicle.remote_services import ExecutionState
+from bimmer_connected.vehicle.charging_profile import ChargingMode
 from bimmer_connected.models import MyBMWCaptchaMissingError
 from bimmer_connected.const import ATTR_STATE
 
@@ -127,14 +128,10 @@ class UnitIdentifiers(IntEnum):
     MILEAGE_COUNTER = auto()
     DRIVING = auto()
     HOME = auto()
+    AC_LIMITS = auto()
+    CHARGING_MODE = auto()
 
-class BmwRegion(str, Enum):
-    """Enum containing BMW API region identifiers"""
-    REST_OF_WORLD = 'rest_of_world'
-    CHINA = 'china'
-    NORTH_AMERICA = 'north_america'
-
-class BmwRemoteService(str, Enum):
+class SupportedBmwRemoteService(str, Enum):
     """Enum containing BMW remote service command strings"""
     LIGHT_FLASH = 'light-flash'
     VEHICLE_FINDER = 'vehicle-finder'
@@ -479,13 +476,13 @@ class BmwPlugin:
         # Handle remote services commands
         if Unit == UnitIdentifiers.REMOTE_SERVICES and Command == 'Set Level':
             level_to_service = {
-                10: BmwRemoteService.LIGHT_FLASH,
-                20: BmwRemoteService.HORN,
-                30: BmwRemoteService.AIR_CONDITIONING,
-                40: BmwRemoteService.DOOR_LOCK,
-                50: BmwRemoteService.DOOR_UNLOCK,
-                60: BmwRemoteService.CHARGE_START,
-                60: BmwRemoteService.CHARGE_STOP
+                10: SupportedBmwRemoteService.LIGHT_FLASH,
+                20: SupportedBmwRemoteService.HORN,
+                30: SupportedBmwRemoteService.AIR_CONDITIONING,
+                40: SupportedBmwRemoteService.DOOR_LOCK,
+                50: SupportedBmwRemoteService.DOOR_UNLOCK,
+                60: SupportedBmwRemoteService.CHARGE_START,
+                70: SupportedBmwRemoteService.CHARGE_STOP
             }
 
             if Level in level_to_service:
@@ -493,8 +490,39 @@ class BmwPlugin:
                 self.tasks_queue.put({'Action': remote_service.value})
 
                 # Additional status update for lock/unlock commands
-                if remote_service in (BmwRemoteService.DOOR_LOCK, BmwRemoteService.DOOR_UNLOCK):
+                if remote_service in (SupportedBmwRemoteService.DOOR_LOCK, SupportedBmwRemoteService.DOOR_UNLOCK):
                     self.tasks_queue.put({'Action': 'StatusUpdate'})
+
+        # Handle Charging ON/OFF (translating to remote service calls)
+        elif Unit == UnitIdentifiers.CHARGING:
+            self.tasks_queue.put({'Action': 'StatusUpdate'})
+            if Command == 'On':
+                self.tasks_queue.put({'Action': SupportedBmwRemoteService.CHARGE_START.value})
+            if Command == 'Off':
+                self.tasks_queue.put({'Action': SupportedBmwRemoteService.CHARGE_STOP.value})
+            self.tasks_queue.put({'Action': 'StatusUpdate'})
+
+        # Handle AC Limit settings (translating to remote service calls)
+        elif Unit == UnitIdentifiers.AC_LIMITS:
+            try:
+                ac_limit_list = get_unit(Devices, Parameters['Name'], UnitIdentifiers.AC_LIMITS).Options['LevelNames'].split('|')
+                ac_limit = ac_limit_list[Level//10]
+                ac_limit = int(ac_limit[:-2])
+            except Exception as err:
+                Domoticz.Error(f'Error setting the AC charging limitition ({err}).')
+            else:
+                Domoticz.Debug(f'Request to send the AC charging limitation with value {ac_limit}.')
+                self.tasks_queue.put({'Action': 'CHARGING_SETTINGS', 'ac_limit': ac_limit})
+            finally:
+                self.tasks_queue.put({'Action': 'StatusUpdate'})
+
+        # Handle Charging profile settings (translating to remote service calls)
+        elif Unit == UnitIdentifiers.CHARGING_MODE:
+            available_charging_modes = [mode.name for mode in ChargingMode]
+            charging_mode = available_charging_modes[Level//10]
+            Domoticz.Debug(f'Request to send the AC charging mode with value {charging_mode}.')
+            self.tasks_queue.put({'Action': 'CHARGING_PROFILE', 'charging_mode': charging_mode})
+            self.tasks_queue.put({'Action': 'StatusUpdate'})
 
     def onDisconnect(self, Connection: Any) -> None:
         """Handle disconnection events."""
@@ -620,25 +648,39 @@ class BmwPlugin:
                             self.store_oauth_to_db(self.oauth.get('session_id_timestamp'))
 
                 # Handle remote service commands
-                elif (action := task['Action']) in [service.value for service in BmwRemoteService]:
+                elif (action := task['Action']) in [service.value for service in SupportedBmwRemoteService] + ['CHARGING_SETTINGS', 'CHARGING_PROFILE']:
                     if self.my_vehicle:
                         try:
                             remote_functions = {
-                                BmwRemoteService.LIGHT_FLASH.value: self.my_vehicle.remote_services.trigger_remote_light_flash,
-                                BmwRemoteService.HORN.value: self.my_vehicle.remote_services.trigger_remote_horn,
-                                BmwRemoteService.AIR_CONDITIONING.value: self.my_vehicle.remote_services.trigger_remote_air_conditioning,
-                                BmwRemoteService.DOOR_LOCK.value: self.my_vehicle.remote_services.trigger_remote_door_lock,
-                                BmwRemoteService.DOOR_UNLOCK.value: self.my_vehicle.remote_services.trigger_remote_door_unlock,
-                                BmwRemoteService.CHARGE_START.value: self.my_vehicle.remote_services.trigger_charge_start,
-                                BmwRemoteService.CHARGE_STOP.value: self.my_vehicle.remote_services.trigger_charge_stop
+                                SupportedBmwRemoteService.LIGHT_FLASH.value: self.my_vehicle.remote_services.trigger_remote_light_flash,
+                                SupportedBmwRemoteService.HORN.value: self.my_vehicle.remote_services.trigger_remote_horn,
+                                SupportedBmwRemoteService.AIR_CONDITIONING.value: self.my_vehicle.remote_services.trigger_remote_air_conditioning,
+                                SupportedBmwRemoteService.DOOR_LOCK.value: self.my_vehicle.remote_services.trigger_remote_door_lock,
+                                SupportedBmwRemoteService.DOOR_UNLOCK.value: self.my_vehicle.remote_services.trigger_remote_door_unlock,
+                                SupportedBmwRemoteService.CHARGE_START.value: self.my_vehicle.remote_services.trigger_charge_start,
+                                SupportedBmwRemoteService.CHARGE_STOP.value: self.my_vehicle.remote_services.trigger_charge_stop
                             }
 
                             if action in remote_functions:
-                                status = asyncio.run(remote_functions[action]())
+                                status = None
+                                if action in (SupportedBmwRemoteService.CHARGE_START, SupportedBmwRemoteService.CHARGE_STOP):
+                                    if self.my_vehicle.fuel_and_battery.is_charger_connected:
+                                        status = asyncio.run(remote_functions[action]())
+                                    else:
+                                        Domoticz.Status(f'Car {self.my_vehicle.name} is not connected to charger; remote service {action} skipped.')
+                                else:
+                                    status = asyncio.run(remote_functions[action]())
 
-                                # Check if the command was executed successfully
-                                if status.state != ExecutionState.EXECUTED:
-                                    Domoticz.Error(f'Error executing remote service {action} for {Parameters["Mode1"]} (not executed).')
+                            elif action == 'CHARGING_SETTINGS':
+                                status = asyncio.run(self.my_vehicle.remote_services.trigger_charging_settings_update(ac_limit=task['ac_limit']))
+
+                            elif action == 'CHARGING_PROFILE':
+                                status = asyncio.run(self.my_vehicle.remote_services.trigger_charging_settings_update(ac_limit=task['charging_mode']))
+
+                            # Check if the command was executed successfully
+                            if status and status.state != ExecutionState.EXECUTED:
+                                Domoticz.Error(f'Error executing remote service {action} for {Parameters["Mode1"]} (not executed).')
+     
                         except Exception as err:
                             Domoticz.Error(f'Error executing remote service {action} for {Parameters["Mode1"]} ({err}).')
                             Domoticz.Debug(f'Remote service error: {err}')
@@ -657,13 +699,7 @@ class BmwPlugin:
 
         except Exception as err:
             Domoticz.Error(f'General error TaskHandler: {err}')
-            # For debugging
-            import traceback
-            log_path = Path(Parameters['HomeFolder']) / "Bmw_traceback.txt"
-            with log_path.open("a") as myfile:
-                myfile.write(f'-General Error-{datetime.datetime.now()}------------------\n')
-                myfile.write(f'{traceback.format_exc()}')
-                myfile.write('---------------------------------\n')
+            log_backtrace_error(Parameters)
             self.tasks_queue.task_done()
 
     def store_oauth_to_db(self, session_id_timestamp: Optional[float]) -> None:
@@ -904,10 +940,47 @@ class BmwPlugin:
                               f'Home/Driving device will not be updated!!')
                 self.location_tracker.error_reported = True
 
+        # Update the AC Limits
+        ac_limits_options = None
+        if (ac_available_limits := self.my_vehicle.charging_profile.ac_available_limits) is not None:
+            Domoticz.Debug(f'Available AC limitations: {ac_available_limits}')
+            if ac_available_limits: #should be none-empty list
+                level_names = '|'.join(f'{A} A' for A in ac_available_limits)
+                ac_limits_options = {
+                    'LevelActions': '|'*(len(ac_available_limits)-1),
+                    'LevelNames': level_names,
+                    'LevelOffHidden': 'false',
+                    'SelectorStyle': '1'
+                }
+        if (ac_current_limit := self.my_vehicle.charging_profile.ac_current_limit) is not None:
+            Domoticz.Debug(f'Current AC limitations: {ac_current_limit}')
+            try:
+                index = ac_available_limits.index(ac_current_limit)
+            except ValueError:
+                index = None
+            else:
+                if ac_limits_options:
+                    update_device(False, Devices, Parameters['Name'], UnitIdentifiers.AC_LIMITS,
+                                  2 if index else 0, 10*index, Options=ac_limits_options)
+                else:
+                    update_device(False, Devices, Parameters['Name'], UnitIdentifiers.AC_LIMITS,
+                                  2 if index else 0, 10*index)
+
+        # Update Charging Mode
+        if (charging_mode := self.my_vehicle.charging_profile.charging_mode) is not None:
+            Domoticz.Debug(f'Charging mode: {charging_mode}')
+            available_charging_modes = [mode.name for mode in ChargingMode]
+            try:
+                index = available_charging_modes.index(charging_mode)
+            except ValueError:
+                index = None
+            else:
+                update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_MODE, 2, 10*index)
+
     def create_devices(self) -> None:
         """Create all required devices if they don't exist yet."""
-        if not Devices.get(Parameters['Name'], None):
-            # Create Mileage device
+        # Create Mileage device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.MILEAGE):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.MILEAGE,
@@ -918,7 +991,8 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            # Create Mileage Counter device
+        # Create Mileage Counter device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.MILEAGE_COUNTER):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.MILEAGE_COUNTER,
@@ -931,18 +1005,11 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            level_names = '|' + '|'.join(service.value for service in [
-                BmwRemoteService.LIGHT_FLASH,
-                BmwRemoteService.HORN,
-                BmwRemoteService.AIR_CONDITIONING,
-                BmwRemoteService.DOOR_LOCK,
-                BmwRemoteService.DOOR_UNLOCK,
-                BmwRemoteService.CHARGE_START,
-                BmwRemoteService.CHARGE_STOP
-            ])
-
+        # Create device for Remote Services
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.REMOTE_SERVICES):
+            level_names = '|' + '|'.join(service.value for service in SupportedBmwRemoteService)
             remote_services_options = {
-                'LevelActions': '|'*len(BmwRemoteService),
+                'LevelActions': '|'*len(SupportedBmwRemoteService),
                 'LevelNames': level_names,
                 'LevelOffHidden': 'false',
                 'SelectorStyle': '1'
@@ -958,7 +1025,8 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            # Create doors status device
+        # Create doors status device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.DOORS):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.DOORS,
@@ -970,7 +1038,8 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            # Create windows status device
+        # Create windows status device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.WINDOWS):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.WINDOWS,
@@ -982,7 +1051,8 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            # Create remaining fuel range device
+        # Create remaining fuel range device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_FUEL):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.REMAIN_RANGE_FUEL,
@@ -993,7 +1063,8 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            # Create remaining electric range device
+        # Create remaining electric range device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_ELEC):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.REMAIN_RANGE_ELEC,
@@ -1004,7 +1075,8 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            # Create charging status device
+        # Create charging status device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.CHARGING):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.CHARGING,
@@ -1016,7 +1088,8 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            # Create charging remaining time device
+        # Create charging remaining time device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.CHARGING_REMAINING):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.CHARGING_REMAINING,
@@ -1027,7 +1100,8 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            # Create battery level device
+        # Create battery level device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.BAT_LEVEL):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.BAT_LEVEL,
@@ -1039,7 +1113,8 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            # Create car status device (locked/unlocked)
+        # Create car status device (locked/unlocked)
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.CAR):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.CAR,
@@ -1051,7 +1126,8 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            # Create driving status device
+        # Create driving status device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.DRIVING):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.DRIVING,
@@ -1063,7 +1139,8 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-            # Create home status device
+        # Create home status device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.HOME):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.HOME,
@@ -1074,6 +1151,35 @@ class BmwPlugin:
                 Image=Images[_IMAGE].ID,
                 Used=1
             ).Create()
+
+        # Create device for AC limitation limits
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.AC_LIMITS):
+            Domoticz.Unit(
+                DeviceID=Parameters['Name'],
+                Unit=UnitIdentifiers.AC_LIMITS,
+                Name=f"{Parameters['Name']} - AC Limits",
+                TypeName='Selector Switch',
+                Options={'LevelActions': '', 'LevelNames': '(update pending)', 'LevelOffHidden': 'false', 'SelectorStyle': '1'},
+                Image=Images[_IMAGE].ID,
+                Used=1).Create()
+
+        # Create device for Charging Mode
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.CHARGING_MODE):
+            charging_mode_options = {
+                'LevelActions': '|'*(len(ChargingMode)-1),
+                'LevelNames': '|'.join(ChargingMode),
+                'LevelOffHidden': 'false',
+                'SelectorStyle': '1'
+            }
+            Domoticz.Unit(
+                DeviceID=Parameters['Name'],
+                Unit=UnitIdentifiers.CHARGING_MODE,
+                Name=f"{Parameters['Name']} - Charging Mode",
+                TypeName='Selector Switch',
+                Options=charging_mode_options,
+                Image=Images[_IMAGE].ID,
+                Used=1).Create()
+
 
 # Global plugin instance
 _plugin = BmwPlugin()
