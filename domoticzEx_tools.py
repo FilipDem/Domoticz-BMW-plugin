@@ -96,7 +96,7 @@ def update_device(
         Domoticz.Debug(f'Device with DeviceID/Unit {device_id}/{unit} does not exist... No update done...')
         return False
 
-    Domoticz.Debug(f'Update device with AlwaysUpdate={always_update}; DeviceID={device_id}; Unit={unit}; nValue={n_value}; sValue={s_value}')
+    Domoticz.Debug(f'Update device with AlwaysUpdate={always_update}; DeviceID={device_id}; Unit={unit}; nValue={n_value}; sValue={s_value}; others={kwargs}')
         
     # Use current values if new ones not provided
     n_value = unit_obj.nValue if n_value is None else n_value
@@ -112,7 +112,8 @@ def update_device(
     property_updates = {
         'Image': 'Image',
         'BatteryLevel': 'BatteryLevel',
-        'SignalLevel': 'SignalLevel'
+        'SignalLevel': 'SignalLevel',
+        'Used': 'Used'
     }
     
     for kwarg_name, property_name in property_updates.items():
@@ -121,7 +122,7 @@ def update_device(
             _update_properties = True
         
     # Update options if provided and different
-    if 'Options' in kwargs and unit_obj.Options != kwargs['Options']:
+    if 'Options' in kwargs and kwargs['Options'] and unit_obj.Options != kwargs['Options']:
         unit_obj.Options = kwargs['Options']
         _update_options = True
 
