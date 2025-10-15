@@ -1,5 +1,5 @@
 {
-"WBAJF11030CD97578": {
+"WBAJFXXXXXXXXXXXX": {
     "Mileage": "vehicle.vehicle.travelledDistance",
     "Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],
     "Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],
@@ -8,7 +8,7 @@
     "Driving": "vehicle.isMoving",
     "RemainingRangeTotal": "vehicle.drivetrain.lastRemainingRange"
     },
-"WBA21EF0905017812": {
+"WBA21YYYYYYYYYYYY": {
     "Mileage": "vehicle.vehicle.travelledDistance",
     "Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],
     "Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],
