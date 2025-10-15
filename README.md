@@ -18,7 +18,7 @@ This has also an impact on the Domoticz-BMW-plugin functionality:
 * BMW supports an "unlimited" streaming service for the CarData, ie an MQTT broker that sends the selected streaming keys. However new data is sent only when some status changes are effected at car level. When the car is "idle", no update is received. Even when an electric car is charging, from experience it shows that at a certain moment no updates are coming in...
 * BMW supports also an API to get data "on request", however there is a quota on the number of messages currently defined at 50. This means that it limits the speed of polling.
 
-Domoticz-BMW-plugin take benefit from both possibilities, ie streaming and API requests. All streaming information coming in is processed. On top, there is a regular (slow) polling mechanism to actively update the information "on request". Currently it is an hourly-mechanism and will be enhanced in the future by a more smart polling.
+Domoticz-BMW-plugin take benefit from both possibilities, ie streaming and API requests. All streaming information coming in is processed. On top, there is a smart polling mechanism to actively update the information "on request". The smart polling algorthm will spread the available API Quota over the remaining day-time, taking into account the possible refresh of data through the streaming channel.
 
 Currently the Domoticz-BMW-plugin supports tracking of the following information:
 * Mileage (several devices are created to followup the mileage)
@@ -58,7 +58,7 @@ The steps below summarize how to activate the BMW CarData service within the MyB
 The following parameters are required for initial plugin setup:
 * **BMW CarData Client_id**: The unique value obtained from the MyBMW portal after creating the CarData Client.
 * **Vehicle Identification Number (VIN)**: The full, 17-character VIN of your BMW vehicle, used to identify the specific car to monitor.
-* **Update Interval (Minutes)**: Defines the maximum frequency (in minutes) at which the plugin will check for new data, provided information is made available by the BMW CarData service.
+* **Min. Update Interval (Minutes)**: Defines the minimal interval (in minutes) at which the plugin will check for new data. If the smart polling would arrive at a shorter interval, it will be overwritten by this value.
 * **Debug Level**: Sets the logging verbosity. Higher levels provide more diagnostic information for troubleshooting purposes.
 
 ### OAuth2 Authentication
