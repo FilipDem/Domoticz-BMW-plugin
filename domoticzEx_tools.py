@@ -476,6 +476,28 @@ def log_backtrace_error(parameters: Dict[str, str]) -> None:
         myfile.write(f'{traceback.format_exc()}')
         myfile.write('---------------------------------\n')
 
+def smart_convert_string(item: str) -> any:
+    """Tries to convert a string to int, then float, otherwise returns the original string."""
+
+    if not isinstance(item, str):
+        return item  # Return non-strings as is
+    try:
+        # Check for integer (must be first, as int("3.0") will fail)
+        return int(item)
+    except ValueError:
+        try:
+            # Check for float (e.g., "3.14" or "3.0")
+            return float(item)
+        except ValueError:
+            # Check boolean
+            if item.lower() == 'false':
+                return False
+            elif item.lower() == 'true':
+                return True
+            else:
+                # Keep as string if conversion fails
+                return item
+
 
 # Constants for backward compatibility
 TIMEDOUT = DomoticzConstants.TIMEDOUT
@@ -508,7 +530,7 @@ __all__ = [
     'get_device_n_value', 'get_unit', 'seconds_since_last_update',
     'date_string_to_datetime', 'get_config_item_db', 'set_config_item_db',
     'erase_config_item_db', 'get_distance', 'average', 'domoticz_api',
-    'log_backtrace_error',
+    'log_backtrace_error', 'smart_convert_string'
     
     # Aliases for backward compatibility
     'DumpConfigToLog', 'UpdateDevice', 'TimeoutDevice',
