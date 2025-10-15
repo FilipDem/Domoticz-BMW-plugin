@@ -4,63 +4,97 @@
 BMW Python Plugin for Domoticz
 
 This plugin integrates BMW vehicles with Domoticz home automation system.
-It uses the bimmerconnected library to fetch data from BMW's API and creates
+It uses the offical BMW's API (CarData) and creates
 corresponding devices in Domoticz.
 
 Author: Filip Demaertelaere
-Version: 4.1.0
+Version: 5.0.0
 License: MIT
 """
 """
-<plugin key="Bmw" name="BMW ConnectedDrive" author="Filip Demaertelaere" version="4.1.0">
+<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.0.0">
     <description>
         <h2>Introduction</h2>
-        <p>The BMW ConnectedDrive plugin for Domoticz offers a robust and seamless integration with your BMW vehicle, transforming your home automation system into a comprehensive command center for your car. This plugin leverages the capabilities of the open-source <a href="https://github.com/bimmerconnected/bimmer_connected">bimmer_connected Python API</a>, providing real-time data monitoring and remote control functionalities. By bridging the gap between your vehicle's advanced telematics and your smart home environment, it empowers users with unprecedented control and insight.</p>
-        <p>Upon successful configuration, the plugin creates a suite of virtual devices within Domoticz, representing key aspects of your BMW's status, including mileage, door and window lock states, fuel and electric range, charging status, and even the vehicle's location and movement. Beyond passive monitoring, it enables active management through remote services such as locking/unlocking doors, flashing lights, sounding the horn, activating air conditioning, initiating charging, setting the AC charging limitation and charging profile, all directly from the Domoticz interface.</p>
-        <p>To ensure optimal performance and security, this plugin requires a valid MyBMW account with corresponding credentials (username and password). Furthermore, the BMW API often necessitates a CAPTCHA token for initial authentication or re-authentication. Users can generate this token by visiting the official `bimmer_connected` documentation at <a href="https://bimmer-connected.readthedocs.io/en/stable/captcha.html">https://bimmer-connected.readthedocs.io/en/stable/captcha.html</a>. It is crucial to note that these CAPTCHA tokens possess a limited validity period, necessitating regeneration and re-entry in the plugin's configuration should authentication failures occur or upon plugin restarts.</p>
-        <p>The plugin is designed with flexibility in mind, offering configurable polling intervals to balance data freshness with API usage, along with comprehensive debug options to assist with troubleshooting and optimization. This makes the BMW ConnectedDrive plugin an invaluable tool for any BMW owner looking to enhance their smart home ecosystem.</p>
+        <p>The BMW CarData plugin provides a robust and seamless integration of your BMW vehicle with the Domoticz home automation system, essentially transforming Domoticz into a comprehensive command center for your car.</p>
+        <p>Upon successful configuration, the plugin automatically creates a suite of virtual devices within Domoticz. These devices represent key aspects of your BMW's status, including mileage, door and window lock states, fuel and electric range, charging status, and the vehicle's real-time location and movement.</p>
+        <p>To ensure optimal performance and security, this plugin requires a valid MyBMW account with corresponding credentials.</p>
+        <p>It is important to note that this plugin is entirely dependent on the data made available by the BMW Open Data Platform. The BMW CarData plugin utilizes the Streaming API (MQTT-based) to retrieve vehicle information, meaning there is no periodic polling by the Domoticz API towards the BMW Open Data Platform. For detailed information, please refer to the official resource: <a href="https://bmw-cardata.bmwgroup.com/thirdparty/public/car-data/overview">https://bmw-cardata.bmwgroup.com/thirdparty/public/car-data/overview</a>.</p>
+        <p>Keep in mind that no data is sent by the BMW Open Data Platform in streaming mode when not any event happens at car level.</p>
+        <br/>
+        <h2>Activation of BMW CarData</h2>
+        <p>The steps below summarize how to activate the BMW CarData service within the MyBMW portal. For a detailed, comprehensive guide, please visit the official documentation: <a href="https://bmw-cardata.bmwgroup.com/customer/public/api-documentation/Id-Introduction">https://bmw-cardata.bmwgroup.com/customer/public/api-documentation/Id-Introduction</a>.</p>
+        <ul>
+            <li>Navigate to the MyBMW Portal, log in with your credentials, and go to the "Vehicle Overview" section.</li>
+            <li>Proceed to the "BMW CarData" section.</li>
+            <li>Scroll down to the "TECHNICAL ACCESS TO BMW CARDATA" section.</li>
+            <li>Click on "Create CarData-client" and ensure both "Request Access to CarData API" and "CarData Stream" options are activated.</li>
+            <li>Scroll to the "STREAM CARDATA" section and click "Change data selection."</li>
+            <li>Select all data keys you wish to include in the stream. Refer to the **Streaming Configuration** section below for required keys.</li>
+        </ul>
         <br/>
         <h2>Configuration Parameters</h2>
+        <p>The following parameters are required for initial plugin setup:</p>
         <ul>
-            <li><b>MyBMW Account Username</b>: Your username for the MyBMW ConnectedDrive account.</li>
-            <li><b>MyBMW Account Password</b>: Your password for the MyBMW ConnectedDrive account. This field is masked for security.</li>
-            <li><b>Vehicle Identification Number (VIN)</b>: The full 17-character Vehicle Identification Number (VIN) of your BMW car. This identifies the specific vehicle to monitor.</li>
-            <li><b>Region</b>: Select the geographical region associated with your MyBMW account. This is crucial for connecting to the correct BMW API endpoint.</li>
-            <li><b>CAPTCHA Token</b>: Enter the CAPTCHA token generated from the bimmer_connected documentation. A new token may be required upon plugin restart or authentication issues.</li>
-            <li><b>Update Interval (Minutes)</b>: Defines how often the plugin will fetch updated status information from your BMW vehicle, in minutes. A lower value provides more frequent updates but may increase API requests.</li>
-            <li><b>Debug Level</b>: Set the level of detail for logging messages. Higher debug levels provide more diagnostic information which can be helpful for troubleshooting.</li>
+            <li><b>BMW CarData Client_id</b>: The unique value obtained from the MyBMW portal after creating the CarData Client.</li>
+            <li><b>Vehicle Identification Number (VIN)</b>: The full, 17-character VIN of your BMW vehicle, used to identify the specific car to monitor.</li>
+            <li><b>Update Interval (Minutes)</b>: Defines the maximum frequency (in minutes) at which the plugin will check for new data, provided information is made available by the BMW CarData service.</li>
+            <li><b>Debug Level</b>: Sets the logging verbosity. Higher levels provide more diagnostic information for troubleshooting purposes.</li>
         </ul>
         <br/>
-        <h2>Advanced Polling Configuration (Bmw.json)</h2>
-        <p>For more granular control over polling behavior based on your vehicle's proximity to home, an optional configuration file named `Bmw.json` can be placed in the plugin's home folder. This JSON file allows you to define custom distances and associated fast polling delays. If this file is not present or is invalid, the plugin will revert to default values.</p>
-        <p>The `Bmw.json` file supports the following parameters (all distances are in meters and delays in minutes):</p>
-        <ul>
-            <li><b>EnteringHomeDistance (m)</b>: This parameter defines the radius around your configured home location within which the car is considered "home". When the car is within this distance, the plugin will use the default polling interval set in the Domoticz plugin parameters. The default value is 1000 meters.</li>
-            <li><b>EnteringHomeDistance_FastPollingDistance (m)</b>: This parameter defines a larger radius around your home. When the car is within this distance but outside the `EnteringHomeDistance`, the plugin will switch to a "fast polling" mode. The default value is 2000 meters.</li>
-            <li><b>EnteringHomeDistance_FastPollingDelay (min)</b>: This parameter specifies the polling interval (in minutes) to be used when the car is within the `EnteringHomeDistance_FastPollingDistance` but not yet within the `EnteringHomeDistance`. This allows for more frequent updates as your vehicle approaches home. The default value is 2 minutes.</li>
-        </ul>
-        <h3>Example Bmw.json content:</h3>
+        <h2>OAuth2 Authentication</h2>
+        <p>When the plugin is started for the first time, an authentication status message will appear in the Domoticz log. Copy the complete verification URI, open it in your browser, and complete the process before the displayed expiry time (you may be prompted to re-enter your MyBMW username and password).</p>
         <pre><code>
-{
-    "EnteringHomeDistance (m)": 500,
-    "EnteringHomeDistance_FastPollingDistance (m)": 1500,
-    "EnteringHomeDistance_FastPollingDelay (min)": 1
-}
+        ============================================================<br/>
+        BMW CarData Authentication Required<br/>
+        ============================================================<br/>
+        User Code: [client_id]<br/>
+        Please visit: [verification_uri_complete]<br/>
+        Complete the authentication in your browser before 15:30:00...<br/>
+        ============================================================<br/>
         </code></pre>
-        <p>This advanced configuration enables dynamic polling, ensuring that you receive more frequent updates when your BMW is nearing your home, providing a more responsive and intelligent integration with your Domoticz system.</p>
+        <p>Upon successful authentication, you will see the confirmation message: "BMW CarData Authentication successful! Starting BMW CarData MQTT connection..." in the Domoticz log.</p>
+        <br/>
+        <h2>Streaming configuration (Bmw_keys_streaming.json)</h2>
+        <p>The configuration file, "Bmw_keys_streaming.json," maps BMW CarData streaming keys to the corresponding implemented Domoticz devices. This JSON file supports multiple cars. The default settings should typically be correct and require no changes. The example shows configurations for a fuel car and a hybrid fuel/electric car.</p>
+        <p>Ensure you update the configuration file with your specific VIN(s). You may add or remove VIN sections to monitor multiple or fewer vehicles.</p>
+        <p>Configuration Rules:</p>
+        <ul>
+            <li>If a device status depends on **one single** BMW CarData key, list only that key (e.g., mileage information).</li>
+            <li>If a device status depends on data from **several** BMW CarData keys, use a JSON array.</li>
+            <li>If an option is removed or not required, deleting its entry from the JSON file will automatically set the corresponding Domoticz device to **UNUSED** (e.g., removing 'Charging' status for a gasoline-only vehicle).</li>
+        </ul>
+        <p>Note that information will only be available if the respective BMW CarData keys are actively included in the data stream (as configured in the "Activation of BMW CarData" chapter above).</p>
+        <p>Example of the configuration file:</p>
+        <pre><code>
+        {<br/>
+        "WBAJF11YYYYYYYYYY": {<br/>
+        &#9;"Mileage": "vehicle.vehicle.travelledDistance",<br/>
+        &#9;"Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],<br/>
+        &#9;"Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],<br/>
+        &#9;"Locked": "vehicle.cabin.door.status",<br/>
+        &#9;"Location": ["vehicle.cabin.infotainment.navigation.currentLocation.latitude", "vehicle.cabin.infotainment.navigation.currentLocation.longitude"],<br/>
+        &#9;"Driving": "vehicle.isMoving",<br/>
+        &#9;"RemainingRangeTotal": "vehicle.drivetrain.totalRemainingRange"<br/>
+        &#9;},<br/>
+        "WBA21EFXXXXXXXXXX": {<br/>
+        &#9;"Mileage": "vehicle.vehicle.travelledDistance",<br/>
+        &#9;"Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],,<br/>
+        &#9;"Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],<br/>
+        &#9;"Locked": "vehicle.cabin.door.status",<br/>
+        &#9;"Location": ["vehicle.cabin.infotainment.navigation.currentLocation.latitude", "vehicle.cabin.infotainment.navigation.currentLocation.longitude"],<br/>
+        &#9;"Driving": "vehicle.isMoving",<br/>
+        &#9;"RemainingRangeTotal": "vehicle.drivetrain.totalRemainingRange",<br/>
+        &#9;"RemainingRangeElec": "vehicle.drivetrain.electricEngine.kombiRemainingElectricRange",<br/>
+        &#9;"Charging": "vehicle.drivetrain.electricEngine.charging.hvStatus",<br/>
+        &#9;"BatteryLevel": "vehicle.drivetrain.batteryManagement.header",<br/>
+        &#9;"ChargingTime": "vehicle.drivetrain.electricEngine.charging.timeRemaining"<br/>
+        &#9;}<br/>
+        }<br/>
+        </code></pre>
     </description>
     <params>
-        <param field="Username" label="MyBMW Account Username" width="200px" required="true" default=""/>
-        <param field="Password" label="MyBMW Account Password" width="200px" required="true" default="" password="true"/>
-        <param field="Mode1" label="Vehicle Identification Number (VIN)" width="200px" required="true" default=""/>
-        <param field="Mode2" label="Region" width="120px" required="true">
-            <options>
-                <option label="Rest Of World" value="rest_of_world"/>
-                <option label="North America" value="north_america"/>
-                <option label="China" value="china" default="Rest Of World"/>
-            </options>
-        </param>
-        <param field="Mode3" label="CAPTCHA Token" width="200px" required="true" default=""/>
+        <param field="Mode1" label="BMW CarData Client_id" width="200px" required="true" default=""/>
+        <param field="Mode2" label="Vehicle Identification Number (VIN)" width="200px" required="true" default=""/>
         <param field="Mode5" label="Update Interval (Minutes)" width="120px" required="true" default="5"/>
         <param field="Mode6" label="Debug Level" width="120px">
             <options>
@@ -75,50 +109,33 @@ License: MIT
             </options>
         </param>
     </params>
-</plugin>
-"""
-# Standard library imports
-import sys
-import os
-import datetime
-import threading
-import queue
-import json
-import time
-import pytz
-import asyncio
-import functools
-from pathlib import Path
-from collections import deque
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Tuple, Any, NamedTuple, TypedDict, Union, Callable, cast
-from enum import IntEnum, Enum, auto
+</plugin>"""
 
-# Add the parent directory to the path for Domoticz imports
+import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+from enum import IntEnum, Enum, auto
+import base64
+import hashlib
+import secrets
+import urllib.parse
+import json
+from typing import Any, Dict, List, Type, Union
+from datetime import datetime, timedelta
+import paho.mqtt.client as mqtt
 
-# Domoticz imports
 import DomoticzEx as Domoticz
 from domoticzEx_tools import (
-    DomoticzConstants, dump_config_to_log, update_device, timeout_device,
-    get_device_n_value, get_device_s_value, get_unit, set_config_item_db,
-    get_config_item_db, erase_config_item_db, get_distance, log_backtrace_error
+    DomoticzConstants, dump_config_to_log, update_device, get_unit,
+    get_config_item_db, set_config_item_db, get_distance,
+    get_device_n_value, smart_convert_string
 )
-
-# BMW API related imports
-from bimmer_connected.account import MyBMWAccount
-from bimmer_connected.api.regions import get_region_from_name
-from bimmer_connected.vehicle.remote_services import ExecutionState
-from bimmer_connected.vehicle.charging_profile import ChargingMode
-from bimmer_connected.models import MyBMWCaptchaMissingError
-from bimmer_connected.const import ATTR_STATE
 
 class UnitIdentifiers(IntEnum):
     """Enum defining unit identifiers for various BMW data points in Domoticz"""
     MILEAGE = auto()
     DOORS = auto()
     WINDOWS = auto()
-    REMAIN_RANGE_FUEL = auto()
+    REMAIN_RANGE_TOTAL = auto()
     REMAIN_RANGE_ELEC = auto()
     CHARGING = auto()
     CHARGING_REMAINING = auto()
@@ -131,851 +148,969 @@ class UnitIdentifiers(IntEnum):
     AC_LIMITS = auto()
     CHARGING_MODE = auto()
 
-class SupportedBmwRemoteService(str, Enum):
-    """Enum containing BMW remote service command strings"""
-    LIGHT_FLASH = 'light-flash'
-    VEHICLE_FINDER = 'vehicle-finder'
-    DOOR_LOCK = 'door-lock'
-    DOOR_UNLOCK = 'door-unlock'
-    HORN = 'horn-blow'
-    AIR_CONDITIONING = 'climate-now'
-    CHARGE_START = 'charge_start'
-    CHARGE_STOP = 'charge_stop'
+class Authenticate(IntEnum):
+    """State machine during authentication"""
+    INIT = auto()
+    OAUTH2 = auto()
+    USER_INTERACTION = auto()
+    DONE = auto()
+    ERROR = auto()
+    REFRESH_TOKEN = auto()
+
+class CarDataURLs(str, Enum):
+    """Enum defining various BMW url points"""
+    MQTT_HOST = 'customer.streaming-cardata.bmwgroup.com'
+    MQTT_PORT = '9000'
+    MQTT_KEEP_ALIVE = '15'
+    BMW_HOST = 'customer.bmwgroup.com'
+    BMW_PORT = '443'
+    API_HOST = 'api-cardata.bmwgroup.com'
+    API_PORT = '443'
+    API_VERSION = 'v1'
+    DEVICE_CODE_URI = '/gcdm/oauth/device/code'
+    TOKEN_URI = '/gcdm/oauth/token'
+    CREATE_CONTAINER_URI = '/customers/containers'
+    GET_TELEMATICDATA_URI = '/customers/vehicles/{vin}/telematicData'
+
+class AuthenticationData:
+    """Store Authentication data"""
+    state_machine: int = Authenticate.INIT
+    client_id: str = None
+    vin: str = None
+    code_verifier: str = None
+    device_code: str = None
+    expires_in: int = None
+    interval: int = None
+
+class APIData:
+    """Store API data"""
+    container_id = None
 
 # Default image for devices
 _IMAGE = 'Bmw'
 
-class BmwConfigData(TypedDict, total=False):
-    """TypedDict defining the structure of BMW configuration file"""
-    EnteringHomeDistance: int  # in meters
-    EnteringHomeDistance_FastPollingDistance: int  # in meters
-    EnteringHomeDistance_FastPollingDelay: int  # in minutes
+# Streaming key filename
+_STREAMING_KEY_FILE = 'Bmw_keys_streaming.json'
 
-class OAuthData(TypedDict, total=False):
-    """TypedDict for OAuth token data"""
-    refresh_token: str
-    gcid: str
-    access_token: str
-    session_id: str
-    session_id_timestamp: float
+# Constants for workaround isMoving
+VELOCITY_THRESHOLD_MPS = 2
+STOP_TIME_THRESHOLD_SEC = 360  
 
-class LocationPoint(NamedTuple):
-    """NamedTuple for a geographic location point"""
-    latitude: float
-    longitude: float
-    timestamp: datetime.datetime
+class CarMovementDetector:
+    def __init__(self):
+        # State variables to store the last known coordinates and time
+        self.last_coord = None
+        self.last_timestamp = datetime.now()
+        
+        # State variables for the "Time-in-Stop" filter
+        self.stop_start_time = None
+        self.is_currently_moving = False # True/False state for final output
+        self.velocity = 0
 
-@dataclass
-class LocationTracker:
-    """
-    Class for tracking and analyzing the vehicle's location data.
-    Maintains a history of locations and provides methods for location-based calculations.
-    """
-    history_size: int = 2
-    history: deque = field(default_factory=lambda: deque(maxlen=2))
-    error_reported: bool = False
-
-    def __post_init__(self) -> None:
-        """Initialize the deque with the specified max length"""
-        self.history = deque(maxlen=self.history_size)
-
-    def update(self, lat: Optional[float], lng: Optional[float], timestamp: Optional[datetime.datetime] = None) -> bool:
+    def process_new_data(self, location, current_timestamp_sec):
         """
-        Update the location tracker with a new location.
-
-        Args:
-            lat: Latitude
-            lng: Longitude
-            timestamp: Time of the location data (defaults to now)
-
-        Returns:
-            bool: True if location was updated, False if invalid location
+        Main function to process a new set of coordinates.
+        current_timestamp_sec: time in seconds (e.g., from time.time())
         """
-        if timestamp is None:
-            timestamp = datetime.datetime.now()
+        
+        # Calculate Delta Distance and Delta Time
+        delta_t = (current_timestamp_sec - self.last_timestamp).total_seconds()
+        
+        # Skip if no new coordinates
+        if not location:
+            if delta_t >= STOP_TIME_THRESHOLD_SEC:
+                self.is_currently_moving = False
+            return f"NO UPDATE (since {delta_t}s)"
 
-        if lat is not None and lng is not None:
-            self.history.append(((lat, lng), timestamp))
-            self.error_reported = False
-            return True
-        return False
+        # Initialize the first point if it doesn't exist
+        if self.last_coord is None:
+            self.last_coord = location
+            self.last_timestamp = current_timestamp_sec
+            return "INITIALIZING" # Assume moving or unknown initially
 
-    def current_location(self) -> Tuple[Optional[float], Optional[float]]:
-        """
-        Get the current location.
+        # Prevent division by zero if timestamps are identical (or too close)
+        if delta_t < 2: 
+            return "MOVEMENT_STATUS_SAME" # Not enough time passed to measure movement
+        Domoticz.Debug(f'Calculate distance with last location {self.last_coord} and current location {location}')
+        delta_d = get_distance(self.last_coord, location, unit='m')
 
-        Returns:
-            tuple: (latitude, longitude) or (None, None) if no location
-        """
-        return self.history[-1][0] if self.history else (None, None)
+        # Calculate Velocity
+        self.velocity = delta_d / delta_t # Meters per second (MPS)
+        Domoticz.Debug(f'delta_t={delta_t}; delta_d={delta_d}; self.velocity={self.velocity}')
 
-    def previous_location(self) -> Tuple[Optional[float], Optional[float]]:
-        """
-        Get the previous location.
+        # Update state for the next cycle
+        self.last_coord = location
+        self.last_timestamp = current_timestamp_sec
 
-        Returns:
-            tuple: (latitude, longitude) or (None, None) if no previous location
-        """
-        return self.history[-2][0] if len(self.history) > 1 else (None, None)
-
-    def is_moving(self) -> bool:
-        """
-        Check if the vehicle is moving (location changed between last two points).
-
-        Returns:
-            bool: True if moving, False otherwise
-        """
-        return self.current_location() != self.previous_location() if len(self.history) > 1 else False
-
-    def calculate_speed(self) -> float:
-        """
-        Calculate speed between the last two points in km/h.
-
-        Returns:
-            float: Speed in km/h, or 0 if can't be calculated
-        """
-        if len(self.history) < 2:
-            return 0.0
-
-        loc1, time1 = self.history[-2]
-        loc2, time2 = self.history[-1]
-
-        distance = get_distance(loc1, loc2)  # in km
-        time_diff = (time2 - time1).total_seconds() / 3600  # in hours
-
-        if time_diff > 0:
-            return distance / time_diff
-        return 0.0
-
-    def distance_from_point(self, point: Tuple[float, float]) -> Optional[float]:
-        """
-        Calculate distance from current location to a point.
-
-        Args:
-            point: (latitude, longitude) tuple
-
-        Returns:
-            float: Distance in km, or None if no current location
-        """
-        if not self.history:
-            return None
-        return get_distance(self.current_location(), point)
-
-    def get_location_history(self) -> List[Tuple[Tuple[float, float], datetime.datetime]]:
-        """
-        Get the full location history.
-
-        Returns:
-            list: List of ((latitude, longitude), timestamp) tuples
-        """
-        return list(self.history)
-
-@dataclass
-class PollingConfig:
-    """
-    Class to manage polling settings based on distance from home.
-    Handles loading settings from configuration file and determining appropriate polling intervals.
-    """
-    home_distance: int = 1000  # meters
-    fast_polling_distance: int = 2000  # meters
-    fast_polling_delay: int = 2  # minutes
-    default_polling_delay: int = 5  # minutes
-
-    def load_from_config(self, config_file_path: Path, default_polling_delay: int) -> bool:
-        """
-        Load polling settings from configuration file.
-
-        Args:
-            config_file_path: Path to configuration file
-            default_polling_delay: Default polling delay from Domoticz settings
-
-        Returns:
-            bool: True if config loaded successfully, False otherwise
-        """
-        self.default_polling_delay = default_polling_delay
-
-        try:
-            with config_file_path.open('r') as json_file:
-                config: Dict[str, Any] = json.load(json_file)
-
-            self.home_distance = config.get('EnteringHomeDistance (m)', self.home_distance)
-            self.fast_polling_distance = config.get('EnteringHomeDistance_FastPollingDistance (m)', self.fast_polling_distance)
-            self.fast_polling_delay = config.get('EnteringHomeDistance_FastPollingDelay (min)', self.fast_polling_delay)
-            Domoticz.Debug(f"Loaded polling settings: Home distance={self.home_distance}m, Fast polling distance={self.fast_polling_distance}m, Fast polling delay={self.fast_polling_delay}min")
-            return True
-
-        except Exception as err:
-            Domoticz.Debug(f"Configuration file not found or invalid, using default values: {err}")
-            return False
-
-    def get_polling_interval(self, distance_km: float) -> int:
-        """
-        Determine the appropriate polling interval based on distance from home.
-
-        Args:
-            distance_km: Distance from home in kilometers
-
-        Returns:
-            int: Polling interval in minutes
-        """
-        distance_m = distance_km * 1000
-
-        if distance_m < self.home_distance:
-            # Already home - use default polling
-            return self.default_polling_delay
-        elif distance_m < self.fast_polling_distance:
-            # Approaching home - use fast polling
-            return self.fast_polling_delay
+        # Apply the Movement Logic and Time-in-Stop Filter
+        if self.velocity > VELOCITY_THRESHOLD_MPS:
+            # Car is actively moving (e.g., driving on a road)
+            self.stop_start_time = None  # Reset the stop timer
+            self.is_currently_moving = True
+            return "MOVING (Active Driving)"
         else:
-            # Far from home - use default polling
-            return self.default_polling_delay
+            # Car is not moving fast enough (stopped at light, traffic, or parked)
+            if self.stop_start_time is None:
+                # First time detecting a stop - start the timer
+                self.stop_start_time = current_timestamp_sec
+                self.is_currently_moving = True # Still considered 'moving' in the sense of being in traffic/a temporary stop
+                return "MOVING (Traffic/Red Light - Timer Started)"
+            else:
+                # Check how long the car has been "stopped" (below threshold)
+                time_in_stop = (current_timestamp_sec - self.stop_start_time).total_seconds()
+                if time_in_stop >= STOP_TIME_THRESHOLD_SEC:
+                    # Car has been stationary long enough to be considered NOT MOVING/PARKED
+                    self.is_currently_moving = False
+                    return "STOPPED (Final Destination/Parked)"
+                else:
+                    # Still within the temporary stop window (Red light/Traffic Jam)
+                    # For the user, this should still be considered "Moving" or "In Transit"
+                    self.is_currently_moving = True
+                    return "MOVING (Traffic Jam/Long Red Light)"
 
-    def is_home(self, distance_km: float) -> bool:
-        """
-        Determine if the vehicle is considered 'home' based on distance.
-
-        Args:
-            distance_km: Distance from home in kilometers
-
-        Returns:
-            bool: True if vehicle is considered at home, False otherwise
-        """
-        return distance_km * 1000 < self.home_distance
-
-def handle_bmw_errors(func: Callable) -> Callable:
-    """Decorator to handle common BMW API errors."""
-    @functools.wraps(func)
-    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-        try:
-            return func(self, *args, **kwargs)
-        except MyBMWCaptchaMissingError:
-            Domoticz.Debug(f"New login with CAPTCHA required with user {Parameters['Username']}.")
-            self.captcha_required = True
-            erase_config_item_db(key='oauth')  # Remove authentication tokens to force use of captcha
-            self.my_bmw = None
-            timeout_device(Devices)
-            return False
-        except Exception as err:
-            Domoticz.Error(f"Error in {func.__name__}: {err}")
-            if hasattr(self, 'error_level'):
-                self.error_level += 1
-            return None
-    return wrapper
-
-
-class BmwPlugin:
+################################################################################
+# Start Plugin
+################################################################################
+class BasePlugin:
     """
     Main plugin class for the BMW Domoticz integration.
-    Handles communication with the BMW API and manages device updates.
+    Handles communication with the BMW CarData API and manages device updates.
     """
-    def __init__(self) -> None:
-        """Initialize the plugin with default values."""
-        self.run_again = DomoticzConstants.MINUTE
-        self.stop = False
-        self.error_level = 0
 
-        self.oauth: Dict[str, Any] = {}
-        self.captcha_required = False
-        self.my_bmw = None
-        self.my_vehicle = None
+    def __init__(self):
+        self.runAgain = 0
+        self.runUpdate = DomoticzConstants.MINUTE
+        self.runAPI = 0
+        self.Stop = False
+        self.tokens = {}
+        self.mqtt_client = None
+        self.bmwData = {}
+        self.streamingKeys = {}
+        self.isMoving = CarMovementDetector()
 
-        self.last_car_opened_time = datetime.datetime.now()
-        self.car_opened_status_given = False
-        self.distance_from_home = 0.0
-
-        self.location_tracker = LocationTracker()
-        self.polling_config = PollingConfig()
-
-        self.tasks_queue: queue.Queue = queue.Queue()
-        self.tasks_thread: Optional[threading.Thread] = None
-
-    def onStart(self) -> None:
-        """
-        Handle the plugin startup.
-        Initialize devices and settings, start the worker thread.
-        """
+    def onStart(self):
         Domoticz.Debug('onStart called')
 
-        # Setup debugging if enabled
+        # Debugging
         if Parameters["Mode6"] != '0':
             try:
                 Domoticz.Debugging(int(Parameters["Mode6"]))
-                dump_config_to_log(Parameters, Devices)
+                DumpConfigToLog(Parameters, Devices)
             except:
                 pass
 
-        default_polling_delay = int(Parameters['Mode5'])
-        config_path = Path(Parameters['HomeFolder']) / "Bmw.json"
-        self.polling_config.load_from_config(config_path, default_polling_delay)
-
         # Create the BMW image if not present
         if _IMAGE not in Images:
-            Domoticz.Image('Bmw.zip').Create()
+            Domoticz.Image(f'{_IMAGE}.zip').Create()
 
+        # Add other images
+        for image in os.listdir(Parameters['HomeFolder']):
+            if image.endswith('.zip') and image.startswith('_IMAGE') and image != f'{_IMAGE}.zip':
+                Domoticz.Image(image).Create()
+
+        # Create devices
         self.create_devices()
 
-        # Initialize devices with timeout status
-        timeout_device(Devices)
+        # Get CarData client_id and vin
+        AuthenticationData.client_id = Parameters["Mode1"]
+        AuthenticationData.vin = Parameters["Mode2"]
 
-        # Start worker thread to handle tasks
-        self.tasks_thread = threading.Thread(name='QueueThread', target=self.handle_tasks)
-        self.tasks_thread.start()
+        # Set up connections
+        self.oauth2 = Domoticz.Connection(
+                Name='OAuth2', 
+                Transport='TCP/IP',
+                Protocol='HTTPS', 
+                Address=CarDataURLs.BMW_HOST, 
+                Port=CarDataURLs.BMW_PORT
+            )
+        self.api = Domoticz.Connection(
+                Name='API', 
+                Transport='TCP/IP',
+                Protocol='HTTPS', 
+                Address=CarDataURLs.API_HOST, 
+                Port=CarDataURLs.API_PORT
+            )
 
-        # Queue initial login task
-        self.tasks_queue.put({'Action': 'Login'})
+        # Authenticate
+        AuthenticationData.state_machine = Authenticate.INIT
+        self.authenticate()
 
-    def onStop(self) -> None:
-        """
-        Handle the plugin stopping.
-        Clean up resources and wait for threads to exit.
-        """
-        Domoticz.Debug(f'onStop called - Threads still active: {threading.active_count()} (should be 1 = {threading.current_thread().name})')
-        self.stop = True
+        # Read key streaming file
+        self._read_streaming_keys_file()
 
-        # Signal queue thread to exit
-        self.tasks_queue.put(None)
-        if self.tasks_thread:
-            self.tasks_thread.join()
+        # Update interval of devices
+        self.runUpdate = DomoticzConstants.MINUTE * int(Parameters['Mode5'])
 
-        # Wait until queue thread has exited
-        Domoticz.Debug(f'Threads still active: {threading.active_count()} (should be 1)')
-        endTime = time.time() + 70
-        while (threading.active_count() > 1) and (time.time() < endTime):
-            for thread in threading.enumerate():
-                if thread.name != threading.current_thread().name:
-                    Domoticz.Debug(f'Thread {thread.name} is still running, waiting otherwise Domoticz will abort on plugin exit.')
-            time.sleep(1.0)
+    def onStop(self):
+        Domoticz.Debug('onStop called')
+        self.Stop = True
+        if self.oauth2 and self.oauth2.Connected():
+            self.oauth2.Disconnect()
+        self.disconnect_mqtt(reconnect=False)
 
-        Domoticz.Debug(f'Plugin stopped - Threads still active: {threading.active_count()} (should be 1)')
+    def onConnect(self, Connection, Status, Description):
+        if self.Stop: return
+        Domoticz.Debug(f'onConnect called with status {Status} - {Connection.Name}')
 
-    def onConnect(self, Connection: Any, Status: int, Description: str) -> None:
-        """Handle successful connection events."""
-        Domoticz.Debug(f'onConnect called ({Connection.Name}) with status={Status}')
-
-    def onMessage(self, Connection: Any, Data: Dict[str, Any]) -> None:
-        """Handle incoming message events."""
-        Domoticz.Debug(f'onMessage called ({Connection.Name})')
-
-    def onCommand(self, DeviceID: str, Unit: int, Command: str, Level: int, Color: str) -> None:
-        """
-        Handle commands sent to devices.
-        This allows control of remote services and functions.
-
-        Args:
-            DeviceID: The device identifier
-            Unit: The unit within the device
-            Command: The command to execute
-            Level: The level parameter for the command
-            Color: The color parameter for the command
-        """
-        if self.stop:
-            return
-
-        Domoticz.Debug(f'onCommand called for DeviceID/Unit: {DeviceID}/{Unit} - Parameter: {Command} - Level: {Level}')
-
-        # Handle remote services commands
-        if Unit == UnitIdentifiers.REMOTE_SERVICES and Command == 'Set Level':
-            level_to_service = {
-                10: SupportedBmwRemoteService.LIGHT_FLASH,
-                20: SupportedBmwRemoteService.HORN,
-                30: SupportedBmwRemoteService.AIR_CONDITIONING,
-                40: SupportedBmwRemoteService.DOOR_LOCK,
-                50: SupportedBmwRemoteService.DOOR_UNLOCK,
-                60: SupportedBmwRemoteService.CHARGE_START,
-                70: SupportedBmwRemoteService.CHARGE_STOP
-            }
-
-            if Level in level_to_service:
-                remote_service = level_to_service[Level]
-                self.tasks_queue.put({'Action': remote_service.value})
-
-                # Additional status update for lock/unlock commands
-                if remote_service in (SupportedBmwRemoteService.DOOR_LOCK, SupportedBmwRemoteService.DOOR_UNLOCK):
-                    self.tasks_queue.put({'Action': 'StatusUpdate'})
-
-        # Handle Charging ON/OFF (translating to remote service calls)
-        elif Unit == UnitIdentifiers.CHARGING:
-            self.tasks_queue.put({'Action': 'StatusUpdate'})
-            if Command == 'On':
-                self.tasks_queue.put({'Action': SupportedBmwRemoteService.CHARGE_START.value})
-            if Command == 'Off':
-                self.tasks_queue.put({'Action': SupportedBmwRemoteService.CHARGE_STOP.value})
-            self.tasks_queue.put({'Action': 'StatusUpdate'})
-
-        # Handle AC Limit settings (translating to remote service calls)
-        elif Unit == UnitIdentifiers.AC_LIMITS:
-            try:
-                ac_limit_list = get_unit(Devices, Parameters['Name'], UnitIdentifiers.AC_LIMITS).Options['LevelNames'].split('|')
-                ac_limit = ac_limit_list[Level//10]
-                ac_limit = int(ac_limit[:-2])
-            except Exception as err:
-                Domoticz.Error(f'Error setting the AC charging limitition ({err}).')
+        if Connection == self.oauth2:
+            if Status == 0:
+                Domoticz.Debug('OAuth2 connection successful.')
+                self.authenticate()
             else:
-                Domoticz.Debug(f'Request to send the AC charging limitation with value {ac_limit}.')
-                self.tasks_queue.put({'Action': 'CHARGING_SETTINGS', 'ac_limit': ac_limit})
-            finally:
-                self.tasks_queue.put({'Action': 'StatusUpdate'})
+                Domoticz.Debug(f'OAuth2 connection error ({Description}). Trying again in 1 minute...')
+                AuthenticationData.state_machine = Authenticate.ERROR
+                self.runAgain = DomoticzConstants.MINUTE
 
-        # Handle Charging profile settings (translating to remote service calls)
-        elif Unit == UnitIdentifiers.CHARGING_MODE:
-            available_charging_modes = [mode.name for mode in ChargingMode]
-            charging_mode = available_charging_modes[Level//10]
-            Domoticz.Debug(f'Request to send the AC charging mode with value {charging_mode}.')
-            self.tasks_queue.put({'Action': 'CHARGING_PROFILE', 'charging_mode': charging_mode})
-            self.tasks_queue.put({'Action': 'StatusUpdate'})
+    def onCommand(self, DeviceID, Unit, Command, Level, Color):
+        if self.Stop: return
+        Domoticz.Debug('onCommand called for DeviceID/Unit: {}/{} - Parameter: {} - Level: {}'.format(DeviceID, Unit, Command, Level))
 
-    def onDisconnect(self, Connection: Any) -> None:
-        """Handle disconnection events."""
-        Domoticz.Debug(f'onDisconnect called ({Connection.Name})')
+    def onDisconnect(self, Connection):
+        Domoticz.Debug(f'onDisconnect called {Connection.Name}')
 
-    def onHeartbeat(self) -> None:
-        """
-        Handle the periodic heartbeat event.
-        Updates the vehicle status at configured intervals.
-        """
-        if self.stop:
-            return
+    def onMessage(self, Connection, Data):
+        if self.Stop: return
+        #Domoticz.Debug(f'onMessage called from {Connection.Name}')
+        #Domoticz.Debug(f'onMessage called from {Connection.Name}: {Data}')
 
-        self.run_again -= 1
-
-        # Check if car is locked and warn if it has been unlocked for too long
-        if (get_device_n_value(Devices, Parameters['Name'], UnitIdentifiers.CAR) and
-            not self.car_opened_status_given and
-            datetime.datetime.now() - self.last_car_opened_time > datetime.timedelta(minutes=60)):
-            Domoticz.Status(f'ATTENTION: Car is not closed since {self.last_car_opened_time}!!')
-            self.car_opened_status_given = True
-
-        # Time to update status?
-        if self.run_again <= 0 and not self.captcha_required:
-            # Schedule login if needed, followed by status update
-            if self.my_bmw is None:
-                self.tasks_queue.put({'Action': 'Login'})
-            self.tasks_queue.put({'Action': 'StatusUpdate'})
-
-            self.run_again = DomoticzConstants.MINUTE * self.polling_config.get_polling_interval(self.distance_from_home)
-
-            # If too many errors, slow down update rate to avoid API limits
-            if self.error_level >= 3:
-                timeout_device(Devices)
-                self.run_again = self.error_level * DomoticzConstants.MINUTE * int(Parameters['Mode5'])
-                Domoticz.Error('Too many errors received: devices are timed out! No updates will be done anymore '
-                              'and retry rate will be slowed down until next successful communication...')
-
-    async def safe_close_loop(self) -> None:
-        """Safely close asyncio loop and cancel all running tasks"""
-        try:
-            # Get all tasks in the current loop
-            tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-
-            # Cancel all tasks
-            for task in tasks:
-                task.cancel()
-
-            # Wait for all tasks to complete with cancellation
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
-        except Exception as e:
-            Domoticz.Debug(f"Error closing asyncio loop: {e}")
-
-    @handle_bmw_errors
-    def handle_tasks(self) -> None:
-        """
-        Worker thread that handles tasks from the queue.
-        Processes login, status updates, and remote commands.
-        """
-        try:
-            Domoticz.Debug('Entering tasks handler')
-            while True:
-                # Get the next task from the queue
-                task = self.tasks_queue.get(block=True)
-
-                # None is the signal to exit the thread
-                if task is None:
-                    Domoticz.Debug('Exiting task handler')
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            asyncio.run(self.safe_close_loop())
-                    except Exception as e:
-                        Domoticz.Debug(f"Error in loop closure: {e}")
-                    self.my_bmw = None
-                    self.my_vehicle = None
-                    self.tasks_queue.task_done()
-                    break
-
-                Domoticz.Debug(f'Handling task: {task["Action"]}.')
-
-                # Process the task based on the action
-                if task['Action'] == 'Login':
-                    # Try to login to MyBMW
-                    if not self.login_my_bmw():
-                        # Supply (valid) Captcha and try again
-                        self.login_my_bmw()
-
-                elif task['Action'] == 'StatusUpdate':
-                    if self.my_bmw:
-                        # Connect to the BMW API using the credentials
-                        try:
-                            # WORKAROUND FOR https://github.com/bimmerconnected/bimmer_connected/issues/430
-                            asyncio.run(self.my_bmw.get_vehicles())
-                        except RuntimeError:
-                            self.my_bmw = None
-                            if not self.error_level:
-                                Domoticz.Log('BMW Status Update: error occurred in getting info from BMW - activating workaround.')
-                            self.error_level += 1
-
-                        # Handle other errors
-                        except Exception as err:
-                            Domoticz.Log(f'BMW Status Update: error occurred in getting info from BMW ({err}).')
-                            self.error_level += 1
-
-                        # If successful, update vehicle information
-                        else:
-                            # Get the data for the specified VIN
-                            self.my_vehicle = self.my_bmw.get_vehicle(Parameters['Mode1'])
-                            if self.my_vehicle:
-                                Domoticz.Debug(f'Car {self.my_vehicle.name} found after update!')
-                                self.update_vehicle_status()
-                                self.error_level = 0
-                            else:
-                                Domoticz.Log(f"BMW Status Update: BMW with VIN {Parameters['Mode1']} not found for user {Parameters['Username']}.")
-                                self.error_level += 1
-
-                        # Always update tokens regardless of success/failure
-                        finally:
-                            # Update refresh_token in storage
-                            Domoticz.Debug(f'Authentication tokens (oauth): {self.oauth}')
-                            self.store_oauth_to_db(self.oauth.get('session_id_timestamp'))
-
-                # Handle remote service commands
-                elif (action := task['Action']) in [service.value for service in SupportedBmwRemoteService] + ['CHARGING_SETTINGS', 'CHARGING_PROFILE']:
-                    if self.my_vehicle:
-                        try:
-                            remote_functions = {
-                                SupportedBmwRemoteService.LIGHT_FLASH.value: self.my_vehicle.remote_services.trigger_remote_light_flash,
-                                SupportedBmwRemoteService.HORN.value: self.my_vehicle.remote_services.trigger_remote_horn,
-                                SupportedBmwRemoteService.AIR_CONDITIONING.value: self.my_vehicle.remote_services.trigger_remote_air_conditioning,
-                                SupportedBmwRemoteService.DOOR_LOCK.value: self.my_vehicle.remote_services.trigger_remote_door_lock,
-                                SupportedBmwRemoteService.DOOR_UNLOCK.value: self.my_vehicle.remote_services.trigger_remote_door_unlock,
-                                SupportedBmwRemoteService.CHARGE_START.value: self.my_vehicle.remote_services.trigger_charge_start,
-                                SupportedBmwRemoteService.CHARGE_STOP.value: self.my_vehicle.remote_services.trigger_charge_stop
-                            }
-
-                            if action in remote_functions:
-                                status = None
-                                if action in (SupportedBmwRemoteService.CHARGE_START, SupportedBmwRemoteService.CHARGE_STOP):
-                                    if self.my_vehicle.fuel_and_battery.is_charger_connected:
-                                        status = asyncio.run(remote_functions[action]())
-                                    else:
-                                        Domoticz.Status(f'Car {self.my_vehicle.name} is not connected to charger; remote service {action} skipped.')
-                                else:
-                                    status = asyncio.run(remote_functions[action]())
-
-                            elif action == 'CHARGING_SETTINGS':
-                                status = asyncio.run(self.my_vehicle.remote_services.trigger_charging_settings_update(ac_limit=task['ac_limit']))
-
-                            elif action == 'CHARGING_PROFILE':
-                                status = asyncio.run(self.my_vehicle.remote_services.trigger_charging_settings_update(ac_limit=task['charging_mode']))
-
-                            # Check if the command was executed successfully
-                            if status and status.state != ExecutionState.EXECUTED:
-                                Domoticz.Error(f'Error executing remote service {action} for {Parameters["Mode1"]} (not executed).')
-     
-                        except Exception as err:
-                            Domoticz.Error(f'Error executing remote service {action} for {Parameters["Mode1"]} ({err}).')
-                            Domoticz.Debug(f'Remote service error: {err}')
-                    else:
-                        Domoticz.Error(f'BMW with VIN {Parameters["Mode1"]} not found for user {Parameters["Username"]}.')
-
-                    # Reset the remote services selector
-                    update_device(True, Devices, Parameters['Name'], UnitIdentifiers.REMOTE_SERVICES, 2, 0)
-
-                # Handle unknown actions
+        if Connection == self.oauth2:
+            if AuthenticationData.state_machine == Authenticate.OAUTH2:
+                if Data.get('Status', None) == '200':
+                    AuthenticationData.state_machine = Authenticate.USER_INTERACTION
+                    self.authenticate(json.loads(Data['Data']))
                 else:
-                    Domoticz.Error(f'Invalid task/action name: {task["Action"]}.')
+                    Domoticz.Error(f"Error during authentication ({Data.get('Status', None)}): {json.loads(Data['Data'])}.")
+                
+            elif AuthenticationData.state_machine == Authenticate.USER_INTERACTION:
+                status = Data.get('Status', None) 
+                data = json.loads(Data['Data'])
+                if status == '200':
+                    self.oauth2.Disconnect()
+                    self._store_tokens(data)
+                    AuthenticationData.state_machine = Authenticate.DONE
+                    Domoticz.Status('BMW CarData Authentication successful! Starting BMW CarData MQTT connection...')
+                    # Reconnection with new tokens required
+                    self.disconnect_mqtt(reconnect=True)
+                    self.runAgain = DomoticzConstants.MINUTE
+                elif status in ['400', '401', '403']:
+                    error = data.get('error', '')
+                    if error == 'authorization_pending':
+                        self.runAgain = AuthenticationData.interval // Domoticz.Heartbeat()
+                    elif error == 'slow_down':
+                        AuthenticationData.interval += Domoticz.Heartbeat()
+                        Domoticz.Debug('Request to slow down polling!')
+                        self.runAgain = AuthenticationData.interval // Domoticz.Heartbeat()
+                    elif error == 'expired_token':
+                        Domoticz.Error('BMW CarData Authentication was not completed in the browser in due time.')
+                        AuthenticationData.state_machine = Authenticate.ERROR
+                    elif error == 'access_denied':
+                        Domoticz.Error('BMW CarData Authentication was denied.')
+                        AuthenticationData.state_machine = Authenticate.ERROR
+                    else:
+                        Domoticz.Error(f'BMW CarData Authentication error ({status}): {error}')
+                        AuthenticationData.state_machine = Authenticate.ERROR
+                else:
+                    Domoticz.Error(f'BMW CarData Authentication Unexpected response ({status}): {data}')
+                    AuthenticationData.state_machine = Authenticate.ERROR
 
-                Domoticz.Debug(f'Finished handling task: {task["Action"]}.')
-                self.tasks_queue.task_done()
+            elif AuthenticationData.state_machine == Authenticate.REFRESH_TOKEN:
+                if Data.get('Status', None) == '200':
+                    self.oauth2.Disconnect()
+                    AuthenticationData.state_machine = Authenticate.DONE
+                    self._store_tokens(json.loads(Data['Data']))
+                    Domoticz.Debug('Tokens refreshed successfully; reconnect MQTT...')
+                    # Reconnection with new tokens required
+                    self.disconnect_mqtt(reconnect=True)
+                    self.runAgain = DomoticzConstants.MINUTE
+                    AuthenticationData.state_machine = Authenticate.DONE
+                else:
+                    Domoticz.Debug(f"Error refreshing tokens ({Data.get('Status', None)}): {json.loads(Data['Data'])}. Restarting authentication...")
+                    AuthenticationData.state_machine = Authenticate.OAUTH2
+                    self.authenticate()
 
-        except Exception as err:
-            Domoticz.Error(f'General error TaskHandler: {err}')
-            log_backtrace_error(Parameters)
-            self.tasks_queue.task_done()
+        elif Connection == self.api:
+            if not APIData.container_id and Data.get('Status', None) == '201':
+                container = json.loads(Data['Data'])
+                container.pop('technicalDescriptors')
+                set_config_item_db(key='container', value=container)
+                Domoticz.Debug(f'Container created: {container}')
+            elif APIData.container_id and Data.get('Status', None) == '200':
+                # Correct answer on TelematicData
+                Domoticz.Debug(f"Telematic data received: {json.loads(Data['Data'])}")
+                telematicData = json.loads(Data['Data']).get('telematicData', {})
+                if AuthenticationData.vin in self.bmwData:
+                    self.bmwData[AuthenticationData.vin].update(telematicData)
+                else:
+                    self.bmwData[AuthenticationData.vin] = telematicData
+                self.api.Disconnect()
+            else:
+                Domoticz.Debug(f"API Error ({Data.get('Status', None)}): {Data}.")
 
-    def store_oauth_to_db(self, session_id_timestamp: Optional[float]) -> None:
-        """
-        Store OAuth authentication tokens in the database.
+    def onHeartbeat(self):
+        if self.Stop: return
 
-        Args:
-            session_id_timestamp: Timestamp for the session ID
-        """
-        if not self.my_bmw:
+        self.runAgain -= 1
+        if self.runAgain <= 0:
+            #Domoticz.Debug(f'Hearbeat status Authentication: {AuthenticationData.state_machine}')
+            if AuthenticationData.state_machine == Authenticate.USER_INTERACTION:
+                # Polling waiting for user interaction
+                self.authenticate()
+            elif AuthenticationData.state_machine == Authenticate.ERROR:
+                # Restart authentication in cause of error
+                AuthenticationData.state_machine = Authenticate.INIT
+                self.authenticate()
+            elif AuthenticationData.state_machine == Authenticate.DONE:
+                # Monitor and refresh tokens as needed.
+                self._ensure_valid_id_token()
+                # Ensure MQTT connection
+                self.connect_mqtt()
+                # Workaround to deduct if vehicle is driving or not
+                self.workaround_driving()
+                self.runAgain = DomoticzConstants.MINUTE
+            else:
+                self.runAgain = DomoticzConstants.MINUTE
+
+        self.runUpdate -= 1
+        if self.runUpdate <= 0:
+            Domoticz.Debug(f'Status BMW(s): {self.bmwData}')
+            # Read bmw keys streaming file if change was detected
+            try:
+                if self.streamingKeysDatim != os.path.getmtime(f"{Parameters['HomeFolder']}{_STREAMING_KEY_FILE}"):
+                    Domoticz.Debug(f'Reading updated file {_STREAMING_KEY_FILE}.')
+                    self._read_streaming_keys_file()
+            except:
+                pass
+            self.update_devices()
+            self.runUpdate = DomoticzConstants.MINUTE * int(Parameters['Mode5'])
+
+        if AuthenticationData.state_machine == Authenticate.DONE:
+            self.runAPI -= 1
+            if self.runAPI <= 0:
+                if not (self.api.Connected() or self.api.Connecting() ):
+                    self.api.Connect()
+                else:
+                    if APIData.container_id:
+                        self._get_telematic_data()
+                        self.runAPI = 60 * DomoticzConstants.MINUTE
+                    else:
+                        APIData.container_id = get_config_item_db(key='container', default={})
+                        if not APIData.container_id:
+                            self._create_container()
+
+    def workaround_driving(self):
+        """Workaround when the vehicle.isMoving keys is not in the stream."""
+        if ( streaming_keys := self.streamingKeys.get('Location', None) ):
+            if ( current_location := self._get_status_from_streaming_keys('Location', streaming_keys, float, delete_key=False) ) and len(current_location)==2:
+                # Workaround if key "vehicle.isMoving" is not supplied... calculate if vehicle is moving
+                result = self.isMoving.process_new_data(current_location, datetime.now())
+                Domoticz.Debug(f'Workaround for vehicle isMoving... isMoving={self.isMoving.is_currently_moving}; last_location={self.isMoving.last_coord}; current_location={current_location}; result={result}')
+                # Use workaround if no vehicle.isMoving data coming true
+                update_device(False, Devices, Parameters['Name'], UnitIdentifiers.DRIVING,
+                              1 if self.isMoving.is_currently_moving else 0, 
+                              100 if self.isMoving.is_currently_moving else 0)
+
+    def update_devices(self):
+        """Update the devices Domoticz"""
+        if self.Stop:
             return
-
-        oauth: OAuthData = {
-            'refresh_token': self.my_bmw.config.authentication.refresh_token,
-            'gcid': self.my_bmw.config.authentication.gcid,
-            'access_token': self.my_bmw.config.authentication.access_token,
-            'session_id': self.my_bmw.config.authentication.session_id,
-            'session_id_timestamp': session_id_timestamp or time.time()
-        }
-        Domoticz.Debug(f'oauth data stored to database: {oauth}')
-        set_config_item_db(key='oauth', value=oauth)
-
-    def load_oauth_from_db(self) -> Dict[str, Any]:
-        """
-        Load OAuth tokens from database and apply them to the BMW account.
-
-        Returns:
-            dict: OAuth token information
-        """
-        if not self.my_bmw:
-            return {}
-
-        oauth = get_config_item_db(key='oauth', default=None)
-        if not oauth:
-            Domoticz.Debug(f'oauth data not loaded from database: {oauth}')
-            return {}
-
-        session_id_timestamp = oauth.pop('session_id_timestamp', None)
-
-        # Pop session_id every 14 days so it gets recreated
-        if (time.time() - (session_id_timestamp or 0)) > 14 * 24 * 60 * 60:
-            oauth.pop('session_id', None)
-            session_id_timestamp = None
-
-        Domoticz.Debug(f'oauth data loaded from database: {oauth}')
-        self.my_bmw.set_refresh_token(**oauth)
-
-        return oauth | {'session_id_timestamp': session_id_timestamp}
-
-    @handle_bmw_errors
-    def login_my_bmw(self) -> bool:
-        """
-        Log in to the MyBMW account.
-
-        Returns:
-            bool: True if login was successful, False if captcha required
-        """
-        # Create MyBMW account object
-        if self.captcha_required:
-            Domoticz.Debug(f"Try login with captcha {Parameters['Mode3']}...")
-            self.my_bmw = MyBMWAccount(
-                Parameters['Username'],
-                Parameters['Password'],
-                get_region_from_name(Parameters['Mode2']),
-                hcaptcha_token=Parameters['Mode3']
-            )
-        else:
-            Domoticz.Debug("Try login without captcha...")
-            self.my_bmw = MyBMWAccount(
-                Parameters['Username'],
-                Parameters['Password'],
-                get_region_from_name(Parameters['Mode2'])
-            )
-
-        # Load saved OAuth tokens
-        self.oauth = self.load_oauth_from_db()
-        Domoticz.Debug(f'myBMW object created (no connection to the BMW API yet!): {self.my_bmw}')
-
-        # Connect to BMW API
-        Domoticz.Debug('Trying to get the vehicles from myBMW (includes login).')
-        if self.my_bmw:
-            asyncio.run(self.my_bmw.get_vehicles())
-
-        # Login successful - store tokens
-        Domoticz.Debug(f'Authentication tokens (oauth): {self.oauth}')
-        self.store_oauth_to_db(self.oauth.get('session_id_timestamp'))
-
-        # Get vehicle data for the specified VIN
-        self.captcha_required = False
-        self.my_vehicle = self.my_bmw.get_vehicle(Parameters['Mode1'])
-
-        if self.my_vehicle:
-            Domoticz.Status(f"Login successful! BMW {self.my_vehicle.name} and VIN {Parameters['Mode1']} found! Updating the status...")
-            self.update_vehicle_status()
-            self.error_level = 0
-        else:
-            Domoticz.Error(f"BMW with VIN {Parameters['Mode1']} not found for user {Parameters['Username']}.")
-            timeout_device(Devices)
-
-        return True
-
-    def update_vehicle_status(self) -> None:
-        """
-        Update Domoticz devices with the latest vehicle status.
-        Updates doors, windows, mileage, charging status, location, etc.
-        """
-        if self.stop or not self.my_vehicle:
+        
+        if not self.bmwData.get(AuthenticationData.vin, None):
             return
-
-        # Update status of Doors
-        update_device(False, Devices, Parameters['Name'], UnitIdentifiers.DOORS,
-                    0 if self.my_vehicle.doors_and_windows.all_lids_closed else 1, 0)
-
-        # Update status of Windows
-        update_device(False, Devices, Parameters['Name'], UnitIdentifiers.WINDOWS,
-                    0 if self.my_vehicle.doors_and_windows.all_windows_closed else 1, 0)
-
-        # Update door lock status
-        is_locked = self.my_vehicle.doors_and_windows.door_lock_state in ['SECURED', 'LOCKED']
-
-        if not is_locked and update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CAR, 1, 0):
-            Domoticz.Debug('Car is opened now!')
-            self.last_car_opened_time = datetime.datetime.now()
-            self.car_opened_status_given = False
-        else:
-            update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CAR, 0, 0)
 
         # Update Mileage
-        mileage_value, mileage_unit = self.my_vehicle.mileage
-        update_device(False, Devices, Parameters['Name'], UnitIdentifiers.MILEAGE,
-                     mileage_value, mileage_value)
-        update_device(False, Devices, Parameters['Name'], UnitIdentifiers.MILEAGE_COUNTER,
-                     0, mileage_value)
+        if not ( streaming_keys := self.streamingKeys.get('Mileage', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.MILEAGE, Used=0 )
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.MILEAGE_COUNTER, Used=0 )
+        else:
+            if status := self._get_status_from_streaming_keys('Mileage', [streaming_keys], int):
+                unit = self.bmwData[AuthenticationData.vin].get(streaming_keys, {}).get('unit', 'km')
+                update_device( False, Devices, Parameters['Name'], UnitIdentifiers.MILEAGE,
+                               status[0], status[0], 
+                               Options={'Custom': f"0;{unit}"}
+                             )
+                update_device( False, Devices, Parameters['Name'], UnitIdentifiers.MILEAGE_COUNTER,
+                               0, status[0],
+                               Options={'ValueUnits': unit, 'ValueQuantity': unit}
+                             )
 
-        # Update unit display if needed
-        mileage_device = get_unit(Devices, Parameters['Name'], UnitIdentifiers.MILEAGE)
-        if mileage_unit not in mileage_device.Options['Custom']:
-            update_device(False, Devices, Parameters['Name'], UnitIdentifiers.MILEAGE,
-                        Options={'Custom': f'0;{mileage_unit}'})
+        # Update status of Doors
+        if not ( streaming_keys := self.streamingKeys.get('Doors', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.DOORS, Used=0 )
+        else:
+            if status := self._get_status_from_streaming_keys('Doors', streaming_keys, ['OPEN', 'CLOSED', True, False]):
+                update_device( False, Devices, Parameters['Name'], UnitIdentifiers.DOORS,
+                               0 if all(x in ['CLOSED', False] for x in status) else 1, 0 )
 
-        mileage_counter_device = get_unit(Devices, Parameters['Name'], UnitIdentifiers.MILEAGE_COUNTER)
-        if mileage_unit not in mileage_counter_device.Options['ValueUnits']:
-            update_device(False, Devices, Parameters['Name'], UnitIdentifiers.MILEAGE_COUNTER,
-                        Options={'ValueUnits': mileage_unit, 'ValueQuantity': mileage_unit})
+        # Update status of Windows
+        if not ( streaming_keys := self.streamingKeys.get('Windows', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.WINDOWS, Used=0 )
+        else:
+            if status := self._get_status_from_streaming_keys('Windows', streaming_keys, ['OPEN', 'INTERMEDIATE', 'CLOSED']):
+                update_device( False, Devices, Parameters['Name'], UnitIdentifiers.WINDOWS,
+                               0 if all(x == 'CLOSED' for x in status) else 1, 0 )
 
-        # Update Remaining electric range
-        elec_range = self.my_vehicle.fuel_and_battery.remaining_range_electric
-        if elec_range != (None, None):
-            elec_value, elec_unit = elec_range
-            update_device(False, Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_ELEC,
-                        elec_value, elec_value)
+        # Update door lock status
+        if not ( streaming_keys := self.streamingKeys.get('Locked', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CAR, Used=0 )
+        else:
+            if status := self._get_status_from_streaming_keys('Locked', [streaming_keys], ['SECURED', 'LOCKED', 'UNLOCKED']):
+                update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CAR,
+                               0 if status[0] in ['SECURED', 'LOCKED'] else 1, 0 )
 
-            # Update unit display if needed
-            elec_device = get_unit(Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_ELEC)
-            if elec_unit not in elec_device.Options['Custom']:
-                update_device(False, Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_ELEC,
-                            Options={'Custom': f'0;{elec_unit}'})
+        # Location data is available 
+        if not ( streaming_keys := self.streamingKeys.get('Location', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.HOME, Used=0 )
+        else:
+            if (status := self._get_status_from_streaming_keys('Location', streaming_keys, float)) and len(status)==2:
+                #Domoticz.Debug(f'Current location is: {status}')
+                # Parse home location from settings
+                home_loc = Settings['Location'].split(';')
+                home_point = (float(home_loc[0]), float(home_loc[1]))
+                # Calculate distance from home using the tracker
+                if distance := get_distance(list(status), home_point, 'm'):
+                    #Domoticz.Debug(f'Distance car-home: {distance} m')
+                    update_device(False, Devices, Parameters['Name'], UnitIdentifiers.HOME,
+                                  1 if distance <= 100 else 0, 100-distance if distance <= 100 else 0)
+
+        # Driving status
+        if not ( streaming_keys := self.streamingKeys.get('Driving', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.DRIVING, Used=0 )
+        else:
+            if status := self._get_status_from_streaming_keys('Driving', [streaming_keys], bool):
+                update_device(False, Devices, Parameters['Name'], UnitIdentifiers.DRIVING,
+                              1 if status[0] else 0, 100 if status[0] else 0)
 
         # Update Remaining fuel range
-        fuel_range = self.my_vehicle.fuel_and_battery.remaining_range_fuel
-        if fuel_range != (None, None):
-            fuel_value, fuel_unit = fuel_range
-            update_device(False, Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_FUEL,
-                        fuel_value, fuel_value)
+        if not ( streaming_keys := self.streamingKeys.get('RemainingRangeTotal', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_TOTAL, Used=0 )
+        else:
+            if status := self._get_status_from_streaming_keys('RemainingRangeTotal', [streaming_keys], int):
+                unit = self.bmwData[AuthenticationData.vin].get(streaming_keys, {}).get('unit', 'km')
+                update_device( False, Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_TOTAL,
+                               status[0], status[0], 
+                               Options={'Custom': f"0;{unit}"}
+                             )
 
-            # Update unit display if needed
-            fuel_device = get_unit(Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_FUEL)
-            if fuel_unit not in fuel_device.Options['Custom']:
-                update_device(False, Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_FUEL,
-                            Options={'Custom': f'0;{fuel_unit}'})
-
-        # Update Electric charging status
-        if (charging_status := self.my_vehicle.fuel_and_battery.charging_status) is not None:
-            is_charging = charging_status == 'CHARGING'
-            update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING,
-                        1 if is_charging else 0, 1 if is_charging else 0)
+        # Update Remaining electric range
+        if not ( streaming_keys := self.streamingKeys.get('RemainingRangeElec', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_ELEC, Used=0 )
+        else:
+            if status := self._get_status_from_streaming_keys('RemainingRangeElec', [streaming_keys], int):
+                unit = self.bmwData[AuthenticationData.vin].get(streaming_keys, {}).get('unit', 'km')
+                update_device( False, Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_ELEC,
+                               status[0], status[0], 
+                               Options={'Custom': f"0;{unit}"}
+                             )
 
         # Update Battery Percentage
-        if (battery_percent := self.my_vehicle.fuel_and_battery.remaining_battery_percent) is not None:
-            update_device(False, Devices, Parameters['Name'], UnitIdentifiers.BAT_LEVEL,
-                        battery_percent, battery_percent)
+        if not ( streaming_keys := self.streamingKeys.get('BatteryLevel', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.BAT_LEVEL, Used=0 )
+        else:
+            if status := self._get_status_from_streaming_keys('BatteryLevel', [streaming_keys], int):
+                update_device(False, Devices, Parameters['Name'], UnitIdentifiers.BAT_LEVEL,
+                              status[0], status[0])
+
+        # Update Electric charging status
+        if not ( streaming_keys := self.streamingKeys.get('Charging', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING, Used=0 )
+        else:
+            if status := self._get_status_from_streaming_keys('Charging', [streaming_keys], 
+                                                               ['NOCHARGING', 'INITIALIZATION', 
+                                                                'CHARGINGACTIVE', 'CHARGINGPAUSED', 
+                                                                'CHARGINGENDED', 'CHARGINGERROR']
+                                                             ):
+                charging = status[0]=='CHARGINGACTIVE'
+                battery = get_device_n_value(Devices, Parameters['Name'], UnitIdentifiers.BAT_LEVEL) or 0
+                update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING,
+                              1 if charging else 0, battery if charging else 0)
 
         # Update Charging Time (minutes)
-        charging_end = self.my_vehicle.fuel_and_battery.charging_end_time
-        vehicle_timestamp = self.my_vehicle.timestamp
-
-        Domoticz.Debug(f'Remaining charging time: {charging_end}; Last info time: {vehicle_timestamp}')
-
-        if charging_end and vehicle_timestamp:
-            # Calculate remaining charging time in minutes
-            charging_time_remaining = max(0, round(
-                (charging_end.astimezone(pytz.utc) -
-                 vehicle_timestamp.replace(tzinfo=datetime.timezone.utc)).total_seconds() / 60, 2))
-            update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_REMAINING,
-                        charging_time_remaining, charging_time_remaining)
+        if get_device_n_value(Devices, Parameters['Name'], UnitIdentifiers.CHARGING):
+            if not ( streaming_keys := self.streamingKeys.get('ChargingTime', None) ):
+                update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_REMAINING, Used=0 )
+            else:
+                if status := self._get_status_from_streaming_keys('ChargingTime', [streaming_keys], int):
+                    update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_REMAINING,
+                                  status[0], status[0])
         else:
             update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_REMAINING, 0, 0)
 
-        # Update vehicle location status
-        Domoticz.Debug(f'Location of vehicle: {self.my_vehicle.vehicle_location} '
-                      f'(or as workaround {self.my_vehicle.data[ATTR_STATE].get("location")})')
-
-        # Check if location data is available (NULL when car geolocation is not activated)
-        if (location := self.my_vehicle.vehicle_location.location):
-            # Parse home location from settings
-            home_loc = Settings['Location'].split(';')
-            home_point = (float(home_loc[0]), float(home_loc[1]))
-
-            # Update location in tracker with timestamp from vehicle data if available
-            self.location_tracker.update(
-                location.latitude,
-                location.longitude,
-                self.my_vehicle.timestamp
-            )
-
-            # Calculate distance from home using the tracker
-            if (distance := self.location_tracker.distance_from_point(home_point)) is not None:
-                self.distance_from_home = distance
-                Domoticz.Debug(f'Distance car-home: {self.distance_from_home} km')
-
-                # Update home status based on distance using PollingConfig
-                is_home = self.polling_config.is_home(self.distance_from_home)
-                update_device(False, Devices, Parameters['Name'], UnitIdentifiers.HOME,
-                           1 if is_home else 0, 1 if is_home else 0)
-
-            # Update driving status based on location change
-            is_moving = self.location_tracker.is_moving()
-            update_device(False, Devices, Parameters['Name'], UnitIdentifiers.DRIVING,
-                       1 if is_moving else 0, 1 if is_moving else 0)
-
-            # Calculate and log speed if moving
-            if is_moving and (speed := self.location_tracker.calculate_speed()) > 0:
-                Domoticz.Debug(f'Estimated speed: {speed:.1f} km/h')
-        else:
-            # Log a warning if location can't be retrieved (only once)
-            if not self.location_tracker.error_reported:
-                Domoticz.Status(f'Location of car {self.my_vehicle.name} cannot be retrieved. '
-                              f'Home/Driving device will not be updated!!')
-                self.location_tracker.error_reported = True
-
+        """
         # Update the AC Limits
         ac_limits_options = None
         if (ac_available_limits := self.my_vehicle.charging_profile.ac_available_limits) is not None:
             Domoticz.Debug(f'Available AC limitations: {ac_available_limits}')
             if ac_available_limits: #should be none-empty list
-                level_names = '|'.join(f'{A} A' for A in ac_available_limits)
+                level_names = '|' + '|'.join(f'{A} A' for A in ac_available_limits)
                 ac_limits_options = {
-                    'LevelActions': '|'*(len(ac_available_limits)-1),
+                    'LevelActions': '|'*len(ac_available_limits),
                     'LevelNames': level_names,
-                    'LevelOffHidden': 'false',
+                    'LevelOffHidden': 'true',
                     'SelectorStyle': '1'
                 }
         if (ac_current_limit := self.my_vehicle.charging_profile.ac_current_limit) is not None:
             Domoticz.Debug(f'Current AC limitations: {ac_current_limit}')
             try:
-                index = ac_available_limits.index(ac_current_limit)
+                index = ac_available_limits.index(ac_current_limit)+1
             except ValueError:
                 index = None
             else:
                 if ac_limits_options:
                     update_device(False, Devices, Parameters['Name'], UnitIdentifiers.AC_LIMITS,
-                                  2 if index else 0, 10*index, Options=ac_limits_options)
+                                  2 if index else 0, 10*index if index else 0, Options=ac_limits_options)
                 else:
                     update_device(False, Devices, Parameters['Name'], UnitIdentifiers.AC_LIMITS,
-                                  2 if index else 0, 10*index)
+                                  2 if index else 0, 10*index if index else 0)
 
         # Update Charging Mode
         if (charging_mode := self.my_vehicle.charging_profile.charging_mode) is not None:
             Domoticz.Debug(f'Charging mode: {charging_mode}')
-            available_charging_modes = [mode.name for mode in ChargingMode]
+            available_charging_modes = get_unit(Devices, Parameters['Name'], UnitIdentifiers.CHARGING_MODE).Options['LevelNames'].split('|')
             try:
                 index = available_charging_modes.index(charging_mode)
             except ValueError:
                 index = None
             else:
                 update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_MODE, 2, 10*index)
+        """
+
+    def _get_status_from_streaming_keys(self, key_name: str, streaming_keys: List, expected_value: Union[List, Type], delete_key: bool = True) -> List:
+        """Parse all the list of streaming keys to get and return their values if matching the correct type"""
+        # Parse to get explicit list of streaming keys
+        keys = [ key for streaming_key in streaming_keys
+                   for key in self.bmwData.get(AuthenticationData.vin, {}).keys() 
+                     if '*' in streaming_key and key.startswith(streaming_key.split('*', 1)[0]) and key.endswith(streaming_key.split('*', 1)[1])
+                     or '*' not in streaming_key and key == streaming_key
+               ]
+        # Get status back of all streaming keys (convert to int/float/boolean when required because polling API gives strings back; streaming not)
+        status = [ smart_convert_string(self.bmwData[AuthenticationData.vin][key].get('value', None)) 
+                   for key in keys 
+                   if self.bmwData[AuthenticationData.vin][key].get('value', None) is not None
+                 ]
+        # Erase streaming keys from BMWStatus
+        if delete_key:
+            for key in keys:
+                self.bmwData[AuthenticationData.vin].pop(key, None)
+        # Check if all return values match expected types
+        check = all(x in expected_value for x in status) if isinstance(expected_value, List) else all(isinstance(x, expected_value) for x in status)
+        if not check:
+            Domoticz.Error(f'{AuthenticationData.vin}: Streaming keys are defined in {_STREAMING_KEY_FILE} for {key_name} that do not return {expected_value}. Key {streaming_keys} gives {status}.')
+            return None
+        # Return status
+        #Domoticz.Debug(f'{key_name}: {status}')
+        return status
+
+    def _get_all_streaming_keys(self) -> List:
+        """Reads all data elements from a JSON object and compiles them into a single list."""
+        
+        # The final list to hold all the processed data elements
+        container_keys = []
+
+        # Iterate over the values in the dictionary
+        for value in self.streamingKeys.values():
+            if isinstance(value, str):
+                container_keys.append(value)
+            elif isinstance(value, list):
+                # Use extend() to add individual items from the sub-list to the main list
+                container_keys.extend(value)
+        Domoticz.Debug(f'Elements for the container are: {container_keys}')
+        return container_keys
+
+    def _create_container(self) -> None:
+        container_data = {
+            'name': AuthenticationData.vin,
+            'purpose': 'Telemetry',
+            'technicalDescriptors': list(self._get_all_streaming_keys())
+        }
+
+        headers = {
+            'Host': CarDataURLs.API_HOST,
+            'Authorization': f"Bearer {self.tokens['access_token']['token']}",
+            'x-version': CarDataURLs.API_VERSION,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+
+        Domoticz.Debug('Create container with all known streaming keys.')
+        self.api.Send( {'Verb':'POST', 'URL':CarDataURLs.CREATE_CONTAINER_URI, 'Data':json.dumps(container_data), 'Headers':headers} )
+
+    def _get_telematic_data(self) -> None:
+        headers = {
+            'Host': CarDataURLs.API_HOST,
+            'Authorization': f"Bearer {self.tokens['access_token']['token']}",
+            'x-version': CarDataURLs.API_VERSION,
+            'Accept': 'application/json'
+        }
+
+        Domoticz.Debug('Send request for telematic data.')
+        self.api.Send( {'Verb':'GET', 'URL':f"{CarDataURLs.GET_TELEMATICDATA_URI.format(vin=AuthenticationData.vin)}?containerId={APIData.container_id['containerId']}", 'Headers':headers} )
+
+    def authenticate(self, data: Dict[str, Any]=None):
+        """Perform OAuth2 Device Code Flow authentication."""
+
+        #import random
+        #ran = random.randint(0, 999999)
+        #Domoticz.Debug(f"*START {ran:06d}: Calling authenticate function with state_machine={AuthenticationData.state_machine}")
+        
+        if not self.oauth2.Connected():
+            Domoticz.Debug('Not connected to OAUTH2 authentication server: reconnecting...')
+            self.oauth2.Connect()
+            #Domoticz.Debug(f"*STOP {ran:06d}: Calling authenticate function with state_machine={AuthenticationData.state_machine}")
+            return
+
+        if AuthenticationData.state_machine == Authenticate.INIT:
+            # Always refresh tokens on startup for fresh hour-long session
+            #Domoticz.Debug('Refreshing tokens for fresh session if token is not yet expired...')
+            if self._load_tokens():
+                Domoticz.Debug('Using refreshed tokens; no need for new authentication')
+                self._ensure_valid_id_token(force_update=True)
+                # Avoid that tokens are again refreshed, because the state machine switched to Authenticate.REFRESH_TOKEN
+                return 
+            else:
+                Domoticz.Debug('Token refresh failed, proceeding with new authentication...')
+                AuthenticationData.state_machine = Authenticate.OAUTH2
+
+        if AuthenticationData.state_machine == Authenticate.OAUTH2:
+            Domoticz.Debug('Starting OAuth2 Device Code Flow authentication...')
+
+            # Step 1: Generate PKCE pair
+            AuthenticationData.code_verifier, code_challenge = self._generate_pkce_pair()
+
+            # Step 2: Request device and user codes
+            device_code_data = {
+                'client_id': AuthenticationData.client_id,
+                'response_type': 'device_code',
+                'scope': 'authenticate_user openid cardata:streaming:read cardata:api:read',
+                'code_challenge': code_challenge,
+                'code_challenge_method': 'S256'
+            }
+
+            headers = {
+                'Host': CarDataURLs.BMW_HOST,
+                'Accept': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+
+            #Domoticz.Debug(f'Request device and user tokens - Sending HTTP POST to {CarDataURLs.DEVICE_CODE_URI}: headers={headers} - data={urllib.parse.urlencode(device_code_data)}')
+            self.oauth2.Send( {'Verb':'POST', 'URL':CarDataURLs.DEVICE_CODE_URI, 'Data':urllib.parse.urlencode(device_code_data), 'Headers':headers} )
+
+        if AuthenticationData.state_machine == Authenticate.USER_INTERACTION:
+            if data:
+                # Extract response data
+                user_code = data['user_code']
+                AuthenticationData.device_code = data['device_code']
+                verification_uri_complete = data['verification_uri_complete']
+                AuthenticationData.expires_in = data['expires_in']
+                AuthenticationData.interval = data.get('interval', Domoticz.Heartbeat())
+
+                # Step 3: Display user instructions
+                text = '\n' + '=' * 60
+                text = text + '\nBMW CarData Authentication Required'
+                text = text + '\n' + '=' * 60
+                text = text + f'\nUser Code: {user_code}'
+                text = text + f'\nPlease visit: {verification_uri_complete}'
+                text = text + f"\nComplete the authentication in your browser before {(datetime.now() + timedelta(seconds=AuthenticationData.expires_in)).strftime('%H:%M:%S')}..."
+                text = text + '\n' + '=' * 60
+
+                Domoticz.Status(text)
+                self.runAgain = AuthenticationData.interval // Domoticz.Heartbeat()
+                #Domoticz.Debug(f'Next polling in {self.runAgain} heartbeats (interval = {AuthenticationData.interval}s)')
+
+            else:
+                # Step 4: Poll for tokens
+                Domoticz.Debug('Polling for the user action to get the tokens.')
+                token_data = {
+                    'client_id': AuthenticationData.client_id,
+                    'device_code': AuthenticationData.device_code,
+                    'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+                    'code_verifier': AuthenticationData.code_verifier
+                }
+                headers = {
+                    'Host': CarDataURLs.BMW_HOST,
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+                #Domoticz.Debug(f'Poll for tokens - Sending HTTP POST to {CarDataURLs.TOKEN_URI}: headers={headers} - data={urllib.parse.urlencode(token_data)}')
+                self.oauth2.Send( {'Verb':'POST', 'URL':CarDataURLs.TOKEN_URI, 'Data':urllib.parse.urlencode(token_data), 'Headers':headers} )
+                self.runAgain = AuthenticationData.interval // Domoticz.Heartbeat()
+
+        if AuthenticationData.state_machine == Authenticate.REFRESH_TOKEN:
+            refresh_data = {
+                'grant_type': 'refresh_token',
+                'refresh_token': self.tokens['refresh_token']['token'],
+                'client_id': AuthenticationData.client_id
+            }
+            headers = {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Host': CarDataURLs.BMW_HOST
+            }
+            #Domoticz.Debug(f'Refresh tokens - Sending HTTP POST to {CarDataURLs.TOKEN_URI}: headers={headers} - data={urllib.parse.urlencode(refresh_data)}')
+            self.oauth2.Send( {'Verb':'POST', 'URL':CarDataURLs.TOKEN_URI, 'Data':urllib.parse.urlencode(refresh_data), 'Headers':headers} )
+
+        #Domoticz.Debug(f"*STOP {ran:06d}: Calling authenticate function with state_machine={AuthenticationData.state_machine}")
+        return True
+
+    def connect_mqtt(self):
+        """
+        Connect to MQTT broker for streaming.
+        Using paho mqtt client because the Domoticz build-in MQTT does not support TLS.
+        """
+
+        if AuthenticationData.state_machine != Authenticate.DONE:
+            Domoticz.Debug('MQTT cannot start because of none-complete authentication.')
+            return
+
+        if self.mqtt_client and self.mqtt_client.is_connected():
+            #Domoticz.Debug('MQTT already running.')
+            return
+
+        Domoticz.Debug('Starting MQTT...')
+        self.mqtt_client = mqtt.Client(
+            protocol=mqtt.MQTTv5,
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        )
+        self.mqtt_client.on_connect = self.onMqttConnect
+        self.mqtt_client.on_message = self.onMqttMessage
+        self.mqtt_client.on_subscribe = self.onMqttSubscribe
+        self.mqtt_client.on_disconnect = self.onMqttDisconnect
+
+        self.mqtt_client.tls_set()
+
+        id_token = self.tokens['id_token']['token']
+        self.mqtt_client.username_pw_set(self.mqtt_username, id_token)
+
+        try:
+            connect_properties = mqtt.Properties(mqtt.PacketTypes.CONNECT)
+            connect_properties.SessionExpiryInterval = 0  # Clean start
+            Domoticz.Debug('Set up connection to MQTT broker...')
+            self.mqtt_client.connect(CarDataURLs.MQTT_HOST, int(CarDataURLs.MQTT_PORT), keepalive=int(CarDataURLs.MQTT_KEEP_ALIVE), properties=connect_properties)
+            Domoticz.Debug('Start mqtt client loop...')
+            self.mqtt_client.loop_start()
+            return True
+        except Exception as e:
+            Domoticz.Error(f"Error connecting to BMW CarData MQTT broker: {e}")
+            return False
+
+    def disconnect_mqtt(self, reconnect: bool=False):
+        """Disconnect from MQTT broker."""
+
+        if self.mqtt_client:
+            self.mqtt_client.user_data_set({'reconnect': reconnect})
+            self.mqtt_client.loop_stop()
+            self.mqtt_client.disconnect()
+        elif reconnect:
+            self.connect_mqtt()
+
+    def onMqttConnect(self, client, userdata, flags, rc, properties):
+        """MQTT connection callback."""
+
+        if rc.value == 0:
+            Domoticz.Debug('Connected to MQTT broker successfully')
+
+            topic = f'{self.mqtt_username}/{AuthenticationData.vin}'
+            self.mqtt_client.subscribe(topic, qos=1)
+            Domoticz.Debug(f'Request to subscribe to topic: {topic} with QoS 1')
+
+            wildcard_topic = f'{self.mqtt_username}/+'
+            self.mqtt_client.subscribe(wildcard_topic, qos=1)
+            Domoticz.Debug(f'Request to subscribe to wildcard topic: {wildcard_topic} with QoS 1')
+
+            expires_at = datetime.fromisoformat(self.tokens['id_token']['expires_at'])
+            time_until_expiry = expires_at - datetime.now()
+            Domoticz.Debug(f'ID token expires in: {time_until_expiry}')
+
+            #if hasattr(flags, "session_present"):
+            #    Domoticz.Debug(f'Session present: {flags.session_present}')
+
+        else:
+            Domoticz.Error(f'Failed to connect to BMW CarData MQTT broker: {rc}.')
+
+    def onMqttMessage(self, client, userdata, msg):
+        """MQTT message callback."""
+
+        try:
+            data = json.loads(msg.payload.decode())
+            Domoticz.Debug(f'Received message on {msg.topic}: {data}')
+            #Populate BMW Data structure with received information
+            if data['vin'] not in self.bmwData:
+                self.bmwData[data['vin']] = {}
+            for key, value in data['data'].items(): 
+                self.bmwData[data['vin']][key] = value 
+
+        except json.JSONDecodeError:
+            Domoticz.Debug(f'Received non-JSON message: {msg.payload.decode()}')
+        except Exception as e:
+            Domoticz.Debug(f'Error processing message: {e}')
+
+    def onMqttSubscribe(self, client, userdata, mid, reason_codes, properties):
+        """MQTT subscription callback."""
+
+        #Domoticz.Debug(f'Subscription confirmed - Message ID: {mid}')
+        for i, rc in enumerate(reason_codes):
+            Domoticz.Debug(f'Subscription confirmed - Topic {i}: {rc}')
+
+    def onMqttDisconnect(self, client, userdata, flags, rc, properties):
+        """MQTT disconnect callback."""
+
+        if rc.value == 0:
+            Domoticz.Debug(f"Disconnect after disconnect() successful; reconnect again: {False if not userdata else userdata.get('reconnect', False)}")
+            if userdata and userdata.get('reconnect', False):
+                self.connect_mqtt()
+        else:
+            Domoticz.Debug(f'Unexpected disconnection from MQTT broker: {rc}')
+
+            if rc.value in (4, 5):
+                Domoticz.Debug('Possible token expiration - checking token validity...')
+                if self._is_token_expired('id_token'):
+                    Domoticz.Debug('ID token has expired, will refresh on next connection attempt')
+            else:
+                Domoticz.Debug('Attempting to reconnect through heartbeat loop...')
+
+    def _generate_pkce_pair(self) -> tuple[str, str]:
+        """Generate PKCE code verifier and code challenge."""
+
+        code_verifier = (
+            base64.urlsafe_b64encode(secrets.token_bytes(32))
+            .decode("utf-8")
+            .rstrip("=")
+        )
+
+        code_challenge = (
+            base64.urlsafe_b64encode(
+                hashlib.sha256(code_verifier.encode("utf-8")).digest()
+            )
+            .decode("utf-8")
+            .rstrip("=")
+        )
+
+        return code_verifier, code_challenge
+
+    def _store_tokens(self, tokens: Dict[str, Any]):
+        """Store tokens with expiration timestamps."""
+
+        now = datetime.now()
+
+        # Store access token (in memory only, not persisted)
+        if 'access_token' in tokens:
+            expires_in = tokens.get('expires_in', 3600)
+            self.tokens['access_token'] = {
+                'token': tokens['access_token'],
+                'expires_at': (now + timedelta(seconds=expires_in)).isoformat(),
+                'type': tokens.get('token_type', 'Bearer')
+            }
+
+        # Store refresh token (persisted for future use)
+        if 'refresh_token' in tokens:
+            self.tokens['refresh_token'] = {
+                'token': tokens['refresh_token'],
+                'expires_at': (now + timedelta(seconds=1209600)).isoformat()  # 2 weeks
+            }
+
+        # Store ID token (in memory only, not persisted)
+        if 'id_token' in tokens:
+            expires_in = tokens.get('expires_in', 3600)
+            self.tokens['id_token'] = {
+                'token': tokens['id_token'],
+                'expires_at': (now + timedelta(seconds=expires_in)).isoformat()
+            }
+
+        # Store other data
+        if 'gcid' in tokens:
+            self.tokens['gcid'] = tokens['gcid']
+        if "scope" in tokens:
+            self.tokens['scope'] = tokens['scope']
+
+        self._save_tokens_selective()
+
+    def _refresh_id_token(self) -> bool:
+        """Refresh access and ID tokens using refresh token."""
+
+        if 'refresh_token' not in self.tokens:
+            Domoticz.Debug('No refresh token available')
+            return False
+        else:
+            if self._is_token_expired('refresh_token'):
+                Domoticz.Debug('Refresh token available but expired')
+                return False
+
+        Domoticz.Debug('Start refresh id token operation...')
+        AuthenticationData.state_machine = Authenticate.REFRESH_TOKEN
+        self.authenticate()
+        return True
+
+    def _ensure_valid_id_token(self, force_update: bool=False) -> None:
+        """Ensure we have valid tokens, refreshing if necessary."""
+
+        if self._is_token_expired('id_token') or force_update:
+            if self._refresh_id_token():
+                Domoticz.Debug(f'Forced update ({force_update}) and/or ID token expired, refreshing using refresh token...')
+            else:
+                Domoticz.Debug('ID token expired and cannot refresh, need new authentication')
+                AuthenticationData.state_machine = Authenticate.OAUTH2
+                self.authenticate()
+        else:
+            Domoticz.Debug(f"ID token still valid until {self.tokens['id_token']['expires_at']}...")
+
+    def _save_tokens_selective(self):
+        """Save only refresh token and metadata to db for persistence."""
+
+        persistent_tokens = {}
+        persistent_tokens['client_id'] = AuthenticationData.client_id
+        if 'refresh_token' in self.tokens:
+            persistent_tokens['refresh_token'] = self.tokens['refresh_token']
+        if 'gcid' in self.tokens:
+            persistent_tokens['gcid'] = self.tokens['gcid']
+        if 'scope' in self.tokens:
+            persistent_tokens['scope'] = self.tokens['scope']
+
+        Domoticz.Debug(f'Tokens stored to database: {persistent_tokens}')
+        set_config_item_db(key='tokens', value=persistent_tokens)
+
+    def _load_tokens(self) -> bool:
+        """Load tokens from db if available."""
+
+        self.tokens = get_config_item_db(key='tokens', default={})
+        if self.tokens:
+            Domoticz.Debug(f'Tokens loaded from database: {self.tokens}')
+            if self.tokens.get('client_id', '') != AuthenticationData.client_id:
+                Domoticz.Debug(f'Client_id changed: tokens from database do not correspond and will be erased!')
+                return False
+            return True
+
+        Domoticz.Debug(f'Tokens not loaded from database.')
+        return False
+
+    def _is_token_expired(self, token_key: str) -> bool:
+        """Check if a token is expired or will expire soon."""
+
+        if token_key not in self.tokens or 'expires_at' not in self.tokens[token_key]:
+            return True
+
+        expires_at = datetime.fromisoformat(self.tokens[token_key]['expires_at'])
+        return datetime.now() + timedelta(minutes=5) >= expires_at
+
+    @property
+    def mqtt_username(self) -> str:
+        """Get MQTT username (GCID) from stored tokens."""
+
+        if 'gcid' in self.tokens:
+            return self.tokens['gcid']
+        raise ValueError('GCID not available - authentication required')
+
+    def _read_streaming_keys_file(self):
+        """Read configuration file with the streaming keys"""
+        Domoticz.Debug(f"Looking for configuration file {Parameters['HomeFolder']}{_STREAMING_KEY_FILE}...")
+        try:
+            # Read parameters
+            with open(f"{Parameters['HomeFolder']}{_STREAMING_KEY_FILE}") as json_file:
+                self.streamingKeys = json.load(json_file).get(AuthenticationData.vin, {})
+            self.streamingKeysDatim = os.path.getmtime(f"{Parameters['HomeFolder']}{_STREAMING_KEY_FILE}")
+            Domoticz.Debug(f'{_STREAMING_KEY_FILE} read: {self.streamingKeys}.')
+            return True
+        except Exception as e:
+            self.streamingKeys = {}
+            Domoticz.Error(f"Problem BMW streaming keys file {Parameters['HomeFolder']}{_STREAMING_KEY_FILE} ({e})!")
+            return False
 
     def create_devices(self) -> None:
         """Create all required devices if they don't exist yet."""
@@ -1005,13 +1140,14 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
+        """
         # Create device for Remote Services
         if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.REMOTE_SERVICES):
-            level_names = '|' + '|'.join(service.value for service in SupportedBmwRemoteService)
+            level_names = '|(select)|' + '|'.join(service.value for service in SupportedBmwRemoteService)
             remote_services_options = {
-                'LevelActions': '|'*len(SupportedBmwRemoteService),
+                'LevelActions': '|'*(len(SupportedBmwRemoteService)+1),
                 'LevelNames': level_names,
-                'LevelOffHidden': 'false',
+                'LevelOffHidden': 'true',
                 'SelectorStyle': '1'
             }
 
@@ -1022,8 +1158,11 @@ class BmwPlugin:
                 TypeName='Selector Switch',
                 Options=remote_services_options,
                 Image=Images[_IMAGE].ID,
-                Used=1
+                Used=0
             ).Create()
+        """
+        if get_unit(Devices, Parameters['Name'], UnitIdentifiers.REMOTE_SERVICES):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.REMOTE_SERVICES, Used=0 )
 
         # Create doors status device
         if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.DOORS):
@@ -1051,12 +1190,12 @@ class BmwPlugin:
                 Used=1
             ).Create()
 
-        # Create remaining fuel range device
-        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_FUEL):
+        # Create remaining total (fuel+elec) range device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.REMAIN_RANGE_TOTAL):
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
-                Unit=UnitIdentifiers.REMAIN_RANGE_FUEL,
-                Name=f"{Parameters['Name']} - Remain mileage (fuel)",
+                Unit=UnitIdentifiers.REMAIN_RANGE_TOTAL,
+                Name=f"{Parameters['Name']} - Remaining range (total)",
                 TypeName='Custom',
                 Options={'Custom': '0;km'},
                 Image=Images[_IMAGE].ID,
@@ -1068,7 +1207,7 @@ class BmwPlugin:
             Domoticz.Unit(
                 DeviceID=Parameters['Name'],
                 Unit=UnitIdentifiers.REMAIN_RANGE_ELEC,
-                Name=f"{Parameters['Name']} - Remain mileage (elec)",
+                Name=f"{Parameters['Name']} - Remaining range (elec)",
                 TypeName='Custom',
                 Options={'Custom': '0;km'},
                 Image=Images[_IMAGE].ID,
@@ -1108,7 +1247,6 @@ class BmwPlugin:
                 Name=f"{Parameters['Name']} - Battery Level",
                 TypeName='Custom',
                 Options={'Custom': '0;%'},
-
                 Image=Images[_IMAGE].ID,
                 Used=1
             ).Create()
@@ -1159,16 +1297,20 @@ class BmwPlugin:
                 Unit=UnitIdentifiers.AC_LIMITS,
                 Name=f"{Parameters['Name']} - AC Limits",
                 TypeName='Selector Switch',
-                Options={'LevelActions': '', 'LevelNames': '(update pending)', 'LevelOffHidden': 'false', 'SelectorStyle': '1'},
+                Options={'LevelActions': '|', 'LevelNames': '|(update pending)', 'LevelOffHidden': 'true', 'SelectorStyle': '1'},
                 Image=Images[_IMAGE].ID,
-                Used=1).Create()
+                Used=1
+            ).Create()
+        else:
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.AC_LIMITS, Used=0 )
 
+        """
         # Create device for Charging Mode
         if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.CHARGING_MODE):
             charging_mode_options = {
-                'LevelActions': '|'*(len(ChargingMode)-1),
-                'LevelNames': '|'.join(ChargingMode),
-                'LevelOffHidden': 'false',
+                'LevelActions': '|'*len(ChargingMode),
+                'LevelNames': '|' + '|'.join(ChargingMode),
+                'LevelOffHidden': 'true',
                 'SelectorStyle': '1'
             }
             Domoticz.Unit(
@@ -1178,43 +1320,44 @@ class BmwPlugin:
                 TypeName='Selector Switch',
                 Options=charging_mode_options,
                 Image=Images[_IMAGE].ID,
-                Used=1).Create()
+                Used=0
+            ).Create()
+        """
+        if get_unit(Devices, Parameters['Name'], UnitIdentifiers.CHARGING_MODE):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_MODE, Used=0 )
 
+global _plugin
+_plugin = BasePlugin()
 
-# Global plugin instance
-_plugin = BmwPlugin()
-
-def onStart() -> None:
-    """Initialize the plugin when Domoticz starts."""
+def onStart():
     global _plugin
     _plugin.onStart()
 
-def onStop() -> None:
-    """Clean up when the plugin stops."""
+def onStop():
     global _plugin
     _plugin.onStop()
 
-def onConnect(Connection: Any, Status: int, Description: str) -> None:
-    """Handle connection events."""
+def onConnect(Connection, Status, Description):
     global _plugin
     _plugin.onConnect(Connection, Status, Description)
 
-def onMessage(Connection: Any, Data: Dict[str, Any]) -> None:
-    """Handle message events."""
-    global _plugin
-    _plugin.onMessage(Connection, Data)
-
-def onCommand(DeviceID: str, Unit: int, Command: str, Level: int, Color: str) -> None:
-    """Handle command events."""
-    global _plugin
-    _plugin.onCommand(DeviceID, Unit, Command, Level, Color)
-
-def onDisconnect(Connection: Any) -> None:
-    """Handle disconnection events."""
+def onDisconnect(Connection):
     global _plugin
     _plugin.onDisconnect(Connection)
 
-def onHeartbeat() -> None:
-    """Handle heartbeat events."""
+def onMessage(Connection, Data):
+    global _plugin
+    _plugin.onMessage(Connection, Data)
+
+def onCommand(DeviceID, Unit, Command, Level, Color):
+    global _plugin
+    _plugin.onCommand(DeviceID, Unit, Command, Level, Color)
+
+def onHeartbeat():
     global _plugin
     _plugin.onHeartbeat()
+    
+################################################################################
+# Specific helper functions
+################################################################################
+
