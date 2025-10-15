@@ -1,3 +1,6 @@
+# PRELIMINARY REMARK !!
+The bimmer_connected API is no longer working due to restrictions at BMW side. A version of the plugin using the official BMW API is available in the branch CarData!!!
+
 # Donation
 It took me quite some effort to get the plugin available. Small contributions are welcome...
 
