@@ -95,7 +95,7 @@ License: MIT
     <params>
         <param field="Mode1" label="BMW CarData Client_id" width="200px" required="true" default=""/>
         <param field="Mode2" label="Vehicle Identification Number (VIN)" width="200px" required="true" default=""/>
-        <param field="Mode5" label="Min. Update Interval (Minutes)" width="120px" required="true" default="30">
+        <param field="Mode5" label="Min. Update Interval (Minutes)" width="120px" required="true" default="30"/>
         <param field="Mode6" label="Debug Level" width="120px">
             <options>
                 <option label="None" value="0" default="true"/>
