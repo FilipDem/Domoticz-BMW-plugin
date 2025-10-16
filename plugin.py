@@ -192,12 +192,11 @@ _IMAGE = 'Bmw'
 # Streaming key filename
 _STREAMING_KEY_FILE = 'Bmw_keys_streaming.json'
 
-# Constants for workaround isMoving
-VELOCITY_THRESHOLD_MPS = 2
-STOP_TIME_THRESHOLD_SEC = 360  
-
 class CarMovementHandler:
     """Detects if the car is currently moving based on location and time stamps."""
+    VELOCITY_THRESHOLD_MPS = 2
+    STOP_TIME_THRESHOLD_SEC = 360
+  
     def __init__(self) -> None:
         # State variables to store the last known coordinates and time
         self.last_coord: Union[List[float], None] = None
@@ -219,7 +218,7 @@ class CarMovementHandler:
         
         # Skip if no new coordinates
         if len(location) != 2:
-            if delta_t >= STOP_TIME_THRESHOLD_SEC:
+            if delta_t >= self.STOP_TIME_THRESHOLD_SEC:
                 self.is_currently_moving = False
             return f"NO UPDATE (since {delta_t}s)"
 
@@ -244,7 +243,7 @@ class CarMovementHandler:
         self.last_timestamp = current_timestamp_sec
 
         # Apply the Movement Logic and Time-in-Stop Filter
-        if self.velocity > VELOCITY_THRESHOLD_MPS:
+        if self.velocity > self.VELOCITY_THRESHOLD_MPS:
             # Car is actively moving (e.g., driving on a road)
             self.stop_start_time = None  # Reset the stop timer
             self.is_currently_moving = True
@@ -259,7 +258,7 @@ class CarMovementHandler:
             else:
                 # Check how long the car has been "stopped" (below threshold)
                 time_in_stop: float = (current_timestamp_sec - self.stop_start_time).total_seconds()
-                if time_in_stop >= STOP_TIME_THRESHOLD_SEC:
+                if time_in_stop >= self.STOP_TIME_THRESHOLD_SEC:
                     # Car has been stationary long enough to be considered NOT MOVING/PARKED
                     self.is_currently_moving = False
                     return "STOPPED (Final Destination/Parked)"
@@ -272,8 +271,7 @@ class CarMovementHandler:
 class PollingHandler:
     """Manages the daily API polling quota and calculates the next polling interval."""
     DAILY_QUOTA = 50
-    # Reserve 5 calls for the last few hours of the day or if MQTT fails
-    RESERVED_CALLS = 5 
+    RESERVED_CALLS = 1
     
     def __init__(self, parent_plugin: Any) -> None:
         """Initializes the Polling Manager and loads its persistent state."""
@@ -284,18 +282,16 @@ class PollingHandler:
         # next_api_call_time is the target time for the next call
         self.next_api_call_time: datetime = datetime.now()
         
-        self._load_state()
-
-    def _load_state(self) -> None:
+    def load_state(self) -> None:
         """Loads persistent state for polling from the Domoticz database."""
         state = get_config_item_db(key='polling_handler', default={})
         
         self.calls_made_today = state.get('calls_made_today', 0)
         last_reset_day_str = state.get('last_reset_day')
         
-        if last_reset_day_str:
+        try:
             self.last_reset_day = datetime.fromisoformat(last_reset_day_str)
-        else:
+        except:
             # Initialize to today's midnight if no state is found
             self.last_reset_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -1021,6 +1017,9 @@ class BasePlugin:
         # Get CarData client_id and vin
         AuthenticationData.client_id = Parameters["Mode1"]
         AuthenticationData.vin = Parameters["Mode2"]
+
+        # Get Smart Polling info
+        self.polling_handler.load_state()
 
         # Set up connections
         self.oauth2 = Domoticz.Connection(
