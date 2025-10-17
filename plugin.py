@@ -1199,7 +1199,7 @@ class BasePlugin:
         if not ( streaming_keys := self.streamingKeys.get('Locked', None) ):
             update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CAR, Used=0 )
         else:
-            if status := self._get_status_from_streaming_keys('Locked', [streaming_keys], ['SECURED', 'LOCKED', 'UNLOCKED']):
+            if status := self._get_status_from_streaming_keys('Locked', [streaming_keys], ['SECURED', 'LOCKED', 'UNLOCKED', 'SELECTIVELOCKED']):
                 update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CAR,
                                0 if status[0] in ['SECURED', 'LOCKED'] else 1, 0 )
 
