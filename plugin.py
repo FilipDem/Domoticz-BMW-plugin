@@ -271,14 +271,14 @@ class CarMovementHandler:
 class PollingHandler:
     """Manages the daily API polling quota and calculates the next polling interval."""
     DAILY_QUOTA = 50
-    RESERVED_CALLS = 1
+    RESERVED_CALLS = 2
+    PERIOD_CONSUME_RESERVED = 7200
     
     def __init__(self, parent_plugin: Any) -> None:
         """Initializes the Polling Manager and loads its persistent state."""
         self.parent = parent_plugin
         self.calls_made_today: int = 0
         self.last_reset_day: Union[datetime, None] = None
-        self.last_mqtt_update: Union[datetime, None] = None
         # next_api_call_time is the target time for the next call
         self.next_api_call_time: datetime = datetime.now()
         
@@ -321,36 +321,26 @@ class PollingHandler:
         """Registers a successful API call, updates state, and schedules the next call."""
         self._reset_quota()
         self.calls_made_today += 1
-        Domoticz.Debug(f'API call registered. Total calls today: {self.calls_made_today}/{self.DAILY_QUOTA}.')
         
         # Schedule the next call immediately after registering a successful one
-        # Use force_seconds=True to get the raw interval for calculation
-        interval_sec = self.get_next_interval(force_seconds=True) 
-        self.next_api_call_time = datetime.now() + timedelta(seconds=interval_sec)
+        self.calculate_next_time_call() 
+        Domoticz.Debug(f'{self.calls_made_today}th API call done today. Next API call at {self.next_api_call_time}.')
 
     def register_mqtt_update(self) -> None:
         """Registers an MQTT update, potentially pushing back the next scheduled API call time."""
-        self.last_mqtt_update = datetime.now()
-        self.parent.runAgainAPI = int(Parameters.get('Mode5', 60)) * 60 // Domoticz.Heartbeat()
-        Domoticz.Debug('MQTT update received. Next API poll in {self.parent.runAgainAPI} heartbeats.')
+        self.calculate_next_time_call() 
+        Domoticz.Debug(f'MQTT update received. Next API call postponed to {self.next_api_call_time}.')
 
-    def get_next_interval(self, force_seconds: bool = False) -> int:
+    def calculate_next_time_call(self) -> None:
         """
-        Calculates the optimal time (in seconds or Heartbeat ticks) for the next API call.
+        Calculates the optimal time for the next API call.
         The algorithm spreads the remaining quota calls evenly over the remaining day.
         """
         self._reset_quota()
 
         now: datetime = datetime.now()
         
-        # 1. Check if the next call is scheduled for the future
-        if not force_seconds and now < self.next_api_call_time:
-            time_left: timedelta = self.next_api_call_time - now
-            interval_sec: int = max(1, int(time_left.total_seconds()))
-            Domoticz.Debug(f'Next API call is scheduled in the future. Remaining interval: {interval_sec}s.')
-            return interval_sec // Domoticz.Heartbeat()
-
-        # 2. Quota Check and Spreading Calculation
+        # Quota Check and Spreading Calculation
         calls_available: int = self.DAILY_QUOTA - self.calls_made_today
         calls_to_spread: int = max(0, calls_available - self.RESERVED_CALLS)
         
@@ -358,39 +348,33 @@ class PollingHandler:
         midnight: datetime = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         time_until_midnight_sec: int = max(1, int((midnight - now).total_seconds()))
 
-        if calls_to_spread <= 0:
-            # Quota exhausted or only reserve remains.
-            # Use reserve calls only if no MQTT update in the last 6 hours
-            reserve_time_threshold_sec = 6 * 3600
-            
-            if self.calls_made_today < self.DAILY_QUOTA and \
-               (self.last_mqtt_update is None or \
-               (now - self.last_mqtt_update).total_seconds() > reserve_time_threshold_sec):
-                
-                Domoticz.Debug(f'Quota near limit. Using reserve call (1 hour interval).')
-                interval_sec = 3600 # 1 hour
-            else:
-                Domoticz.Debug('Quota fully exhausted or recent MQTT update received. Waiting until midnight.')
-                interval_sec = time_until_midnight_sec # Wait until midnight
-        else:
+        # Minimal interval
+        min_interval_sec: int = int(Parameters.get('Mode5', 60)) * 60 
+
+        if calls_to_spread > 0:            
             # Spread the available calls evenly
             interval_sec: int = time_until_midnight_sec // calls_to_spread
-            
             # Enforce a minimum interval using Parameter['Mode5'] (Max. Update Interval)
-            min_interval_sec: int = int(Parameters.get('Mode5', 60)) * 60 
-            interval_sec = max(min_interval_sec, interval_sec)
-            
-            Domoticz.Debug(f'Spreading {calls_to_spread} calls over {time_until_midnight_sec}s. Next interval: {interval_sec}s.')
+            interval_sec = max(min_interval_sec, interval_sec)      
+            #Domoticz.Debug(f'Spreading {calls_to_spread} calls over {time_until_midnight_sec}s. Next interval: {interval_sec}s.')
 
-        if force_seconds:
-            return interval_sec
-        
+        else:
+            if calls_available > 0 and time_until_midnight_sec <= self.PERIOD_CONSUME_RESERVED:
+                # The number of calls to spread is the remaining available quota (which is <= RESERVED_CALLS).
+                reserve_calls_to_spread = calls_available                
+                # Spread the remaining time evenly across the reserve calls.
+                interval_sec = time_until_midnight_sec // reserve_calls_to_spread
+                # Apply the minimum interval, just as with the dynamic spread.
+                interval_sec = max(min_interval_sec, interval_sec)
+                Domoticz.Debug(f'Quota near limit. Spreading {reserve_calls_to_spread} reserve calls over {time_until_midnight_sec}s. Next interval: {interval_sec}s.')
+            else:
+                # Quota fully exhausted (calls_available == 0) OR too early for reserve.
+                Domoticz.Debug('Quota fully exhausted or too early to use reserve call. Waiting until midnight.')
+                interval_sec = time_until_midnight_sec # Wait until midnight
+
         # Calculate next call time and return interval in heartbeat ticks
         self.next_api_call_time = now + timedelta(seconds=interval_sec)
         
-        # Return in Heartbeat ticks (minimum 1)
-        return max(1, interval_sec // Domoticz.Heartbeat())
-
 class MqttClientHandler:
     """
     Handles all MQTT logic for connecting to the BMW CarData streaming service.
@@ -403,6 +387,8 @@ class MqttClientHandler:
         """Initializes the MQTT handler with a reference to the main plugin."""
         self.parent = parent_plugin
         self.mqtt_client: Union[mqtt.Client, None] = None
+        self.last_timer_reset_time: datetime = datetime.min # Used for throttling
+        self.THROTTLE_INTERVAL_SEC: int = 10 # Throttle timer resets to 5 seconds
 
     def connect_mqtt(
         self
@@ -512,8 +498,11 @@ class MqttClientHandler:
                 for key, value in data.get('data', {}).items(): 
                     self.parent.bmwData[vin][key] = value 
 
-            # Register MQTT update with PollingManager
-            self.parent.polling_handler.register_mqtt_update()
+            # Throttled Registration of MQTT update
+            now = datetime.now()
+            if (now - self.last_timer_reset_time).total_seconds() > self.THROTTLE_INTERVAL_SEC:
+                self.parent.polling_handler.register_mqtt_update()
+                self.last_timer_reset_time = now
 
         except json.JSONDecodeError:
             Domoticz.Debug(f'Received non-JSON message: {msg.payload.decode()}')
@@ -1076,7 +1065,9 @@ class BasePlugin:
                 AuthenticationData.state_machine = Authenticate.ERROR
                 self.runAgainOAuth = DomoticzConstants.MINUTE
         
-        # API Connection is established, but no action needed until onMessage receives the response.
+        elif Connection == self.api:
+            if Status == 0:
+                self.api_handler.poll_telematic_data()
 
     def onCommand(self, DeviceID: int, Unit: int, Command: str, Level: int, Color: str) -> None:
         """Called when a Domoticz device associated with the plugin is controlled."""
@@ -1135,12 +1126,13 @@ class BasePlugin:
         if AuthenticationData.state_machine == Authenticate.DONE:
             self.runAgainAPI -= 1
             if self.runAgainAPI <= 0:
-                if not (self.api.Connected() or self.api.Connecting() ):
-                    self.api.Connect()
-                else:
-                    self.api_handler.poll_telematic_data()
-                    # Only reset the API timer if a request was successfully sent/attempted
-                    self.runAgainAPI = self.polling_handler.get_next_interval()
+                Domoticz.Debug(f'Total API calls today: {self.polling_handler.calls_made_today}/{self.polling_handler.DAILY_QUOTA}. Next API call at {self.polling_handler.next_api_call_time}.')
+                if datetime.now() >= self.polling_handler.next_api_call_time:
+                    if not (self.api.Connected() or self.api.Connecting() ):
+                        self.api.Connect()
+                    else:
+                        self.api_handler.poll_telematic_data()
+                self.runAgainAPI = 5 * DomoticzConstants.MINUTE
 
     def workaround_driving(self) -> None:
         """Applies a calculated driving status if the 'vehicle.isMoving' key is missing from the stream."""
