@@ -129,7 +129,7 @@ from domoticzEx_tools import (
     DomoticzConstants, dump_config_to_log, update_device, get_unit,
     get_config_item_db, set_config_item_db, erase_config_item_db,
     get_device_n_value, smart_convert_string, timeout_device,
-    get_distance
+    get_distance, check_activity_units_and_timeout
 )
 
 class UnitIdentifiers(IntEnum):
@@ -527,9 +527,9 @@ class MqttClientHandler:
                 client.subscribe(wildcard_topic, qos=1)
                 Domoticz.Debug(f'Request to subscribe to wildcard topic: {wildcard_topic} with QoS 1')
 
-                expires_at: datetime = datetime.fromisoformat(self.parent.tokens['id_token']['expires_at'])
-                time_until_expiry: timedelta = expires_at - datetime.now()
-                Domoticz.Debug(f'ID token expires in: {time_until_expiry}')
+            expires_at: datetime = datetime.fromisoformat(self.parent.tokens['id_token']['expires_at'])
+            time_until_expiry: timedelta = expires_at - datetime.now()
+            Domoticz.Debug(f'ID token expires in: {time_until_expiry}')
 
         # Bad username/password, Not authorized, Quota exceeded
         #elif rc in (134, 135, 151):
@@ -542,7 +542,7 @@ class MqttClientHandler:
             self.time_next_connect_after_critical_disconnect = datetime.now() + timedelta(minutes=self.RECONNECTION_PAUSE_TIME_MIN)
             # Avoids that the MQTT client automatically reconnects by its loop
             self.mqtt_client.loop_stop()
-            Domoticz.Error(f'BMW CarData MQTT connection error ({rc}). Waiting {self.RECONNECTION_PAUSE_TIME_MIN} minutes to reconnect until {self.time_next_connect_after_critical_disconnect}.')
+            Domoticz.Error(f'BMW CarData MQTT connection error ({rc}). Waiting {self.RECONNECTION_PAUSE_TIME_MIN} minutes to reconnect until {self.time_next_connect_after_critical_disconnect}. Additional token information: {self.parent.auth_handler.tokens_expiry}.')
 
     def onMqttMessage(self, 
         client: mqtt.Client,
@@ -705,7 +705,7 @@ class OAuth2Handler:
                 self.parent.oauth2.Disconnect()
                 AuthenticationData.state_machine = Authenticate.DONE
                 self._store_tokens(response_data)
-                Domoticz.Debug('Tokens refreshed successfully; reconnect MQTT...')
+                Domoticz.Debug(f'Tokens refreshed successfully; reconnect MQTT... - tokens info: {self.tokens_expiry}')
                 if self.parent.mqtt_handler.is_mqtt_connected():
                     Domoticz.Debug('Already connected to BMW CarData MQTT... Disconnect and reconnect!')
                     self.parent.mqtt_handler.disconnect_mqtt(reconnect=True)
@@ -864,8 +864,16 @@ class OAuth2Handler:
 
         self._save_tokens_selective()
 
-    def _refresh_id_token(self) -> bool:
-        """Initiates the token refresh operation using the refresh token."""
+    @property
+    def tokens_expiry(self) -> str:
+        """Get the token informaton (without secret values) as string for debug purpose."""
+        tokens: str = (f"access_token expiry: {self.parent.tokens.get('access_token', {}).get('expires_at', None)} - "
+                       f"refresh_token expiry: {self.parent.tokens.get('refresh_token', {}).get('expires_at', None)} - "
+                       f"id_token expiry: {self.parent.tokens.get('id_token', {}).get('expires_at', None)}")
+        return tokens
+
+    def _check_refresh_token(self) -> bool:
+        """Check the refresh token validity."""
 
         if 'refresh_token' not in self.parent.tokens:
             Domoticz.Debug('No refresh token available')
@@ -875,21 +883,19 @@ class OAuth2Handler:
                 Domoticz.Debug('Refresh token available but expired')
                 return False
 
-        Domoticz.Debug('Start refresh id token operation...')
-        AuthenticationData.state_machine = Authenticate.REFRESH_TOKEN
-        self.authenticate()
         return True
 
     def _ensure_valid_id_token(self, force_update: bool=False) -> None:
         """Checks ID token validity and triggers refresh or re-authentication if necessary."""
 
         if self._is_token_expired('id_token') or force_update:
-            if self._refresh_id_token():
+            if self._check_refresh_token():
                 Domoticz.Debug(f'Forced update ({force_update}) and/or ID token expired, refreshing using refresh token...')
+                AuthenticationData.state_machine = Authenticate.REFRESH_TOKEN
             else:
                 Domoticz.Debug('ID token expired and cannot refresh, need new authentication')
                 AuthenticationData.state_machine = Authenticate.OAUTH2
-                self.authenticate()
+            self.authenticate()
         else:
             Domoticz.Debug(f"ID token still valid until {self.parent.tokens['id_token']['expires_at']} (complete token: {self.parent.tokens['id_token']})...")
 
@@ -929,7 +935,7 @@ class OAuth2Handler:
             return True
 
         expires_at: datetime = datetime.fromisoformat(self.parent.tokens[token_key]['expires_at'])
-        return datetime.now() + timedelta(minutes=8) >= expires_at
+        return datetime.now() + timedelta(minutes=10) >= expires_at
 
     @property
     def mqtt_username(self) -> str:
@@ -1307,6 +1313,7 @@ class BasePlugin:
                 pass
             self.workaround_driving() # Workaround to deduct if vehicle is driving or not
             self.update_devices()
+            check_activity_units_and_timeout(Devices, 3600)
             self.runAgainDeviceUpdate = DomoticzConstants.MINUTE
 
         if AuthenticationData.state_machine == Authenticate.DONE:
@@ -1451,15 +1458,15 @@ class BasePlugin:
                               1 if charging else 0, battery if charging else 0)
 
         # Update Charging Time (minutes)
-        if get_device_n_value(Devices, Parameters['Name'], UnitIdentifiers.CHARGING):
-            if not ( streaming_keys := self.streamingKeys.get('ChargingTime', None) ):
-                update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_REMAINING, Used=0 )
-            else:
+        if not ( streaming_keys := self.streamingKeys.get('ChargingTime', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_REMAINING, Used=0 )
+        else:
+            if get_device_n_value(Devices, Parameters['Name'], UnitIdentifiers.CHARGING):
                 if status := self._get_status_from_streaming_keys('ChargingTime', [streaming_keys], int):
                     update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_REMAINING,
                                   status[0], status[0])
-        else:
-            update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_REMAINING, 0, 0)
+            else:
+                update_device(False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_REMAINING, 0, 0)
 
         # Clean up unused/legacy devices
         if get_unit(Devices, Parameters['Name'], UnitIdentifiers.REMOTE_SERVICES):
