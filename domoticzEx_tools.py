@@ -96,8 +96,6 @@ def update_device(
         Domoticz.Debug(f'Device with DeviceID/Unit {device_id}/{unit} does not exist... No update done...')
         return False
 
-    Domoticz.Debug(f'Update device with AlwaysUpdate={always_update}; DeviceID={device_id}; Unit={unit}; nValue={n_value}; sValue={s_value}; others={kwargs}')
-        
     # Use current values if new ones not provided
     n_value = unit_obj.nValue if n_value is None else n_value
     s_value = unit_obj.sValue if s_value is None else s_value   
@@ -117,7 +115,7 @@ def update_device(
     }
     
     for kwarg_name, property_name in property_updates.items():
-        if kwarg_name in kwargs and getattr(unit_obj, property_name) != kwargs[kwarg_name]:
+        if kwarg_name in kwargs and (kwargs[kwarg_name] is not None) and getattr(unit_obj, property_name) != kwargs[kwarg_name]:
             setattr(unit_obj, property_name, kwargs[kwarg_name])
             _update_properties = True
         
@@ -136,6 +134,8 @@ def update_device(
     if device.TimedOut:
         device.TimedOut = 0
 
+    Domoticz.Debug(f'Request to update device with AlwaysUpdate={always_update}; DeviceID={device_id}; Unit={unit}; nValue={n_value}; sValue={s_value}; others={kwargs}. Updates done: standard={_update_standard}, properties={_update_properties}, options={_update_options}. Seconds since last update: {seconds_since_last_update(devices, device_id, unit)}')
+        
     return _update_standard or _update_properties or _update_options
 
 
@@ -182,15 +182,15 @@ def check_activity_units_and_timeout(
         # Check all devices
         for device_name, device in devices.items():
             for unit_number, unit in device.Units.items():
-                if seconds_since_last_update(devices, device.DeviceID, unit_number) > seconds_last_update_required:
+                if unit.Used and (sec := seconds_since_last_update(devices, device.DeviceID, unit_number)) > seconds_last_update_required:
                     timeout_device(devices, device_id=device.DeviceID)
-                    timed_out_devices.append(unit.Name)
+                    timed_out_devices.append({'Name': unit.Name, 'Seconds': sec})
     elif device := devices.get(device_id):
         # Check specified device
         for unit_number, unit in device.Units.items():
-            if seconds_since_last_update(devices, device_id, unit_number) > seconds_last_update_required:
+            if unit.Used and (sec := seconds_since_last_update(devices, device_id, unit_number)) > seconds_last_update_required:
                 timeout_device(devices, device_id=device_id)
-                timed_out_devices.append(unit.Name)
+                timed_out_devices.append({'Name': unit.Name, 'Seconds': sec})
                 
     return timed_out_devices
 
@@ -498,6 +498,35 @@ def smart_convert_string(item: str) -> any:
                 # Keep as string if conversion fails
                 return item
 
+def get_system_timezone() -> str:
+    """
+    Try to get IANA-name of the local timezone from Linux.
+    """
+    import os
+    tz_name: str = os.environ.get('TZ', "")
+    if tz_name and '/' in tz_name: # Controleer op IANA-formaat
+        return tz_name
+    # Fallback
+    return "Europe/Brussels" 
+
+def convert_utc_to_local(utc_time_str: str) -> str:
+    """
+    Convert ISO-8601 UTC-time string to local timezone string
+    """
+    import pytz
+    target_timezone_name: str = get_system_timezone()
+        
+    # 1. Get local timezone
+    local_tz: pytz.BaseTzInfo = pytz.timezone(target_timezone_name)
+
+    # 2. Parse UTC-string
+    utc_dt: datetime = datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
+
+    # 3. Convert to local timezone
+    local_dt: datetime = utc_dt.astimezone(local_tz)
+
+    # 4. Format to HH:MM
+    return local_dt.strftime("%H:%M")
 
 # Constants for backward compatibility
 TIMEDOUT = DomoticzConstants.TIMEDOUT
@@ -530,7 +559,7 @@ __all__ = [
     'get_device_n_value', 'get_unit', 'seconds_since_last_update',
     'date_string_to_datetime', 'get_config_item_db', 'set_config_item_db',
     'erase_config_item_db', 'get_distance', 'average', 'domoticz_api',
-    'log_backtrace_error', 'smart_convert_string'
+    'log_backtrace_error', 'smart_convert_string', 'convert_utc_to_local',
     
     # Aliases for backward compatibility
     'DumpConfigToLog', 'UpdateDevice', 'TimeoutDevice',
