@@ -1032,7 +1032,7 @@ class CarDataAPIHandler:
 
         # Errors not specifically handled
         else:
-            Domoticz.Error(f"BMW CarData API Error ({status}): {data}.")
+            Domoticz.Error(f"BMW CarData API Error (rc={status} - internal state={APIData.state_machine}): {data}.")
 
     def poll_telematic_data(self) -> bool:
         """Checks for the container ID and either creates it or requests telematic data."""
@@ -1071,8 +1071,9 @@ class CarDataAPIHandler:
             elif isinstance(value, list):
                 container_keys.extend(value)
 
-        self.streaming_key_hash = str(hash(tuple(sorted(set(container_keys))))) # str avoids that it is converted to a float after storage in DB
-        Domoticz.Debug(f'Elements for the container are (hash={self.streaming_key_hash}): {container_keys}')
+        sorted_key_string: str = str(tuple(sorted(set(container_keys))))
+        self.streaming_key_hash = hashlib.sha256(sorted_key_string.encode('utf-8')).hexdigest()
+        Domoticz.Debug(f'Elements for the container are (hash={self.streaming_key_hash}): {sorted_key_string}')
         
         return container_keys
 
