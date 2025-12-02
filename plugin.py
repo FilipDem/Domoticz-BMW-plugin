@@ -213,7 +213,7 @@ class CarMovementHandler:
         self.last_timestamp: datetime = datetime.now()
         
         # State variables for the "Time-in-Stop" filter
-        self.stop_start_time: Union[datetime, None] = None
+        self.stop_start_time: Union[datetime, None] = datetime.now()
         self.is_currently_moving: bool = False # True/False state for final output
         self.velocity: float = 0.0
 
@@ -404,6 +404,7 @@ class MqttClientHandler:
     THROTTLE_INTERVAL_SEC = 10 # Throttle timer from mqtt messages
     RECONNECTION_PAUSE_TIME_MIN = 15
     MAX_DELAY_AUTOMATIC_RECONNECTION = 1800
+    MQTT_MAX_INTERVAL_EXPECTED_MESSAGES = 3600*24
     MQTT_LOG = {16:'DEBUG', 1:'INFO', 2:'NOTICE', 8:'ERROR', 4:'WARNING'}
     
     def __init__(
@@ -417,6 +418,16 @@ class MqttClientHandler:
         self.connected: bool = False
         self.connection_errors: int = 0
         self.time_next_connect_after_critical_disconnect = None
+
+    def is_mqtt_active(self) -> bool:
+        """ Check if there was MQTT activity during the last time period """
+        now: datetime = datetime.now()
+        delta: int = (now - self.time_last_message_received).total_seconds()
+        if delta < self.MQTT_MAX_INTERVAL_EXPECTED_MESSAGES:
+            return True
+        if 0 < delta % self.MQTT_MAX_INTERVAL_EXPECTED_MESSAGES < 60:
+            Domoticz.Error(f'No BMW MQTT CarData information was received since {self.time_last_message_received} (OAUTH2 internal state={AuthenticationData.state_machine}; MQTT Connected: {self.is_mqtt_connected()})!')
+        return False
 
     def is_mqtt_connected(self) -> bool:
         """Returns the status of the MQTT connection."""
@@ -432,21 +443,21 @@ class MqttClientHandler:
         Requires authenticated tokens from the parent plugin.
         """
 
+        # Still connected; do nothing
+        if self.is_mqtt_connected():
+            return True
+
         # No MQTT credentials available; finish first authentication process
         if AuthenticationData.state_machine != Authenticate.DONE:
             Domoticz.Debug('MQTT cannot start because of none-complete authentication.')
             return False
 
-        # Still connected; do nothing
-        if self.is_mqtt_connected():
-            return True
-
         # Wait a period of time to make new connections if we had a "quota exceeded" error.
         Domoticz.Debug(f'self.time_next_connect_after_critical_disconnect={self.time_next_connect_after_critical_disconnect}.')
         if self.time_next_connect_after_critical_disconnect:
             if datetime.now() < self.time_next_connect_after_critical_disconnect:
-                self.mqtt_client.loop_stop()
                 Domoticz.Debug(f'Wait to connect to MQTT due to errors. Next connection at {self.time_next_connect_after_critical_disconnect}.')
+                self.mqtt_client.loop_stop()
                 return False
             else:
                 self.time_next_connect_after_critical_disconnect = None
@@ -506,10 +517,13 @@ class MqttClientHandler:
 
         Domoticz.Debug(f'Call disconnect_mqtt() with reconnect={reconnect}...')
         if self.mqtt_client:
-            self.mqtt_client.user_data_set({'reconnect': reconnect})
+            #self.mqtt_client.user_data_set({'reconnect': reconnect})
             self.mqtt_client.disconnect()   # 1. Initiate disconnect first. This signals the network thread to send the DISCONNECT packet and start running the onMqttDisconnect callback.
             time.sleep(0.5)                 # 2. Wait briefly. This gives the background thread time to process the disconnect and fire the onMqttDisconnect callback, which sets self.connected = False.
             self.mqtt_client.loop_stop()    # 3. Explicitly stop the background loop thread. This call blocks and waits for the thread to fully exit (join), ensuring synchronous cleanup and preventing the Python interpreter shutdown race condition.
+
+        if reconnect:
+            self.connect_mqtt()
 
     def onMqttConnect(
         self, 
@@ -523,6 +537,7 @@ class MqttClientHandler:
 
         # Success
         if rc == 0:
+            #Domoticz.Status(f'Connected to MQTT broker successfully with userdata: {userdata} - flags: {flags} - rc: {rc} - properties: {properties}')
             Domoticz.Debug(f'Connected to MQTT broker successfully with userdata: {userdata} - flags: {flags} - rc: {rc} - properties: {properties}')
             self.connected = True
 
@@ -545,6 +560,7 @@ class MqttClientHandler:
         elif rc in (134, 135, 151):
             # Avoids that the MQTT client automatically reconnects by its loop
             self.mqtt_client.loop_stop()
+            Domoticz.Error(f'BMW CarData MQTT connection error ({rc}): bad username/password (134), not authorized (135) or quota exceeded (151). Refreshing tokens to reconnect...')
             AuthenticationData.state_machine = Authenticate.ERROR
             
         else:
@@ -577,6 +593,7 @@ class MqttClientHandler:
             if (now - self.time_last_message_received).total_seconds() > self.THROTTLE_INTERVAL_SEC:
                 self.time_last_message_received = now
                 self.parent.polling_handler.register_mqtt_update()
+                #Domoticz.Status('BMW CarData MQTT data received (throttling!)...')
 
         except json.JSONDecodeError:
             Domoticz.Debug(f'Received non-JSON message: {msg.payload.decode()}')
@@ -606,20 +623,23 @@ class MqttClientHandler:
         ) -> None:
         """MQTT disconnect callback. Handles clean disconnects and token expiration detection."""
 
-        reconnect: bool = False if not userdata else userdata.get('reconnect', False)
+        #reconnect: bool = False if not userdata else userdata.get('reconnect', False)
         self.connected = False
 
         # Check for clean disconnect (rc=0) 
         if rc == 0:
+            #Domoticz.Status(f'Normal disconnection from MQTT broker ({rc}); reconnect again: {reconnect}.')
             Domoticz.Debug(f'Normal disconnection from MQTT broker ({rc}); reconnect again: {reconnect}.')
             # Only reconnect if decent reconnection was done
-            if reconnect:
-                self.connect_mqtt()
+            #if reconnect:
+            #    self.connect_mqtt()
         # Disconnect due to keep alive timout
         elif rc == 141:
-            Domoticz.Debug(f'Disconnection from MQTT broker: {rc}.')
+            #Domoticz.Status(f'Disconnection from MQTT broker due to keep-alive mechanism: {rc}.')
+            Domoticz.Debug(f'Disconnection from MQTT broker due to keep-alive mechanism: {rc}.')
         # Bad username/password, Not authorized
         elif rc in (134, 135):
+            #Domoticz.Status(f'Disconnection from MQTT broker ({rc}): possible token expiration - checking token validity...')
             Domoticz.Debug(f'Disconnection from MQTT broker ({rc}): possible token expiration - checking token validity...')
             if self.parent.auth_handler._is_token_expired('id_token'):
                 Domoticz.Debug('ID token has expired, will refresh on next connection attempt')
@@ -630,6 +650,7 @@ class MqttClientHandler:
                 ReasonString = properties.ReasonString
             if hasattr(properties, 'ServerReference'):
                 ServerReference = properties.ServerReference
+            #Domoticz.Status(f'Unexpected disconnection from MQTT broker: {rc} ({ReasonString} - {ServerReference}).')
             Domoticz.Debug(f'Unexpected disconnection from MQTT broker: {rc} ({ReasonString} - {ServerReference}).')
             #MQTT Client automatically reconnects by its loop with a backoff mechanism
 
@@ -663,7 +684,7 @@ class OAuth2Handler:
         try:
             response_data: Dict[str, Any] = json.loads(data['Data'])
         except (KeyError, json.JSONDecodeError):
-            Domoticz.Error(f"OAuth2 (internal state={AuthenticationData.state_machine}) response data invalid: {data}")
+            Domoticz.Status(f"OAuth2 (internal state={AuthenticationData.state_machine}) response data invalid and neglected ({data}).")
             AuthenticationData.state_machine = Authenticate.ERROR
             return
 
@@ -680,7 +701,7 @@ class OAuth2Handler:
                 self.parent.oauth2.Disconnect()
                 self._store_tokens(response_data)
                 AuthenticationData.state_machine = Authenticate.DONE
-                Domoticz.Status('BMW CarData Authentication successfull! Starting BMW CarData MQTT connection...')
+                Domoticz.Status('BMW CarData Authentication successful! Starting BMW CarData MQTT connection...')
                 if self.parent.mqtt_handler.is_mqtt_connected():
                     Domoticz.Debug('Already connected to BMW CarData MQTT... Disconnect and reconnect!')
                     self.parent.mqtt_handler.disconnect_mqtt(reconnect=True)
@@ -1032,7 +1053,13 @@ class CarDataAPIHandler:
 
         # Errors not specifically handled
         else:
-            Domoticz.Error(f"BMW CarData API Error (rc={status} - internal state={APIData.state_machine}): {data}.")
+            if status in (500):
+                Domoticz.Status(f"BMW CarData API Error (rc={status} - internal state={APIData.state_machine}): {data}.")
+            else:
+                Domoticz.Error(f"BMW CarData API Error (rc={status} - internal state={APIData.state_machine}): {data}.")
+            # Reset state machine in case of error in listing container as the list of containers is only informative
+            if APIData.state_machine == API.LIST_CONTAINER:
+                APIData.state_machine = API.GET_CONTAINER
 
     def poll_telematic_data(self) -> bool:
         """Checks for the container ID and either creates it or requests telematic data."""
@@ -1326,6 +1353,7 @@ class BasePlugin:
                 self.auth_handler._ensure_valid_id_token()
                 # Ensure MQTT connection
                 self.mqtt_handler.connect_mqtt()
+                self.mqtt_handler.is_mqtt_active()
                 self.runAgainOAuth = DomoticzConstants.MINUTE
             else:
                 self.runAgainOAuth = DomoticzConstants.MINUTE
@@ -1366,6 +1394,8 @@ class BasePlugin:
             current_time: datetime = datetime.now()
             result: str = self.mov_handler.process_new_data(list(current_location), current_time)
             Domoticz.Debug(f'Workaround for vehicle isMoving... isMoving={self.mov_handler.is_currently_moving}; last_location={self.mov_handler.last_coord}; current_location={current_location}; result={result}')
+            #if (self.mov_handler.is_currently_moving==False and len(current_location)>0) or self.mov_handler.is_currently_moving:
+            #    Domoticz.Status(f'Vehicle isMoving status: isMoving={self.mov_handler.is_currently_moving}; last_location={self.mov_handler.last_coord}; current_location={current_location}; result={result}')
             # Use workaround if no vehicle.isMoving data coming true
             update_device(False, Devices, Parameters['Name'], UnitIdentifiers.DRIVING,
                           1 if self.mov_handler.is_currently_moving else 0, 
