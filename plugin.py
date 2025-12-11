@@ -41,56 +41,6 @@ License: MIT
             <li><b>Debug Level</b>: Sets the logging verbosity. Higher levels provide more diagnostic information for troubleshooting purposes.</li>
         </ul>
         <br/>
-        <h2>OAuth2 Authentication</h2>
-        <p>When the plugin is started for the first time, an authentication status message will appear in the Domoticz log. Copy the complete verification URI, open it in your browser, and complete the process before the displayed expiry time (you may be prompted to re-enter your MyBMW username and password).</p>
-        <pre><code>
-        ============================================================<br/>
-        BMW CarData Authentication Required<br/>
-        ============================================================<br/>
-        User Code: [client_id]<br/>
-        Please visit: [verification_uri_complete]<br/>
-        Complete the authentication in your browser before 15:30:00...<br/>
-        ============================================================<br/>
-        </code></pre>
-        <p>Upon successful authentication, you will see the confirmation message: "BMW CarData Authentication successful! Starting BMW CarData MQTT connection..." in the Domoticz log.</p>
-        <br/>
-        <h2>Streaming configuration (Bmw_keys_streaming.json)</h2>
-        <p>The configuration file, "Bmw_keys_streaming.json," maps BMW CarData streaming keys to the corresponding implemented Domoticz devices. This JSON file supports multiple cars. The default settings should typically be correct and require no changes. The example shows configurations for a fuel car and a hybrid fuel/electric car.</p>
-        <p>Ensure you update the configuration file with your specific VIN(s). You may add or remove VIN sections to monitor multiple or fewer vehicles.</p>
-        <p>Configuration Rules:</p>
-        <ul>
-            <li>If a device status depends on **one single** BMW CarData key, list only that key (e.g., mileage information).</li>
-            <li>If a device status depends on data from **several** BMW CarData keys, use a JSON array.</li>
-            <li>If an option is removed or not required, deleting its entry from the JSON file will automatically set the corresponding Domoticz device to **UNUSED** (e.g., removing 'Charging' status for a gasoline-only vehicle).</li>
-        </ul>
-        <p>Note that information will only be available if the respective BMW CarData keys are actively included in the data stream (as configured in the "Activation of BMW CarData" chapter above).</p>
-        <p>Example of the configuration file:</p>
-        <pre><code>
-        {<br/>
-        "WBAJF11YYYYYYYYYY": {<br/>
-        &#9;"Mileage": "vehicle.vehicle.travelledDistance",<br/>
-        &#9;"Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],<br/>
-        &#9;"Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],<br/>
-        &#9;"Locked": "vehicle.cabin.door.status",<br/>
-        &#9;"Location": ["vehicle.cabin.infotainment.navigation.currentLocation.latitude", "vehicle.cabin.infotainment.navigation.currentLocation.longitude"],<br/>
-        &#9;"Driving": "vehicle.isMoving",<br/>
-        &#9;"RemainingRangeTotal": "vehicle.drivetrain.totalRemainingRange"<br/>
-        &#9;},<br/>
-        "WBA21EFXXXXXXXXXX": {<br/>
-        &#9;"Mileage": "vehicle.vehicle.travelledDistance",<br/>
-        &#9;"Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],<br/>
-        &#9;"Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],<br/>
-        &#9;"Locked": "vehicle.cabin.door.status",<br/>
-        &#9;"Location": ["vehicle.cabin.infotainment.navigation.currentLocation.latitude", "vehicle.cabin.infotainment.navigation.currentLocation.longitude"],<br/>
-        &#9;"Driving": "vehicle.isMoving",<br/>
-        &#9;"RemainingRangeTotal": "vehicle.drivetrain.totalRemainingRange",<br/>
-        &#9;"RemainingRangeElec": "vehicle.drivetrain.electricEngine.kombiRemainingElectricRange",<br/>
-        &#9;"Charging": "vehicle.drivetrain.electricEngine.charging.hvStatus",<br/>
-        &#9;"BatteryLevel": "vehicle.drivetrain.batteryManagement.header",<br/>
-        &#9;"ChargingTime": "vehicle.drivetrain.electricEngine.charging.timeRemaining"<br/>
-        &#9;}<br/>
-        }<br/>
-        </code></pre>
     </description>
     <params>
         <param field="Mode1" label="BMW CarData Client_id" width="200px" required="true" default=""/>
