@@ -14,72 +14,109 @@ The QR codes comply the EPC069-12 European Standard for SEPA Credit Transfers ([
 [![](https://www.paypalobjects.com/en_US/BE/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=AT4L7ST55JR4A) 
 
 # Domoticz-BMW-plugin
-Domoticz plugin working with BMW Connected Drive. A big changes is introduced since version 2.0.0 of the plugin. BMW discontinued the BMW Connected Drive App and related services. 
-* From plugin 2.0.0, the new services based on the MyBMW app are integrated. This version does not work anymore due to changes at the server side of BMW. The status of the vehicle cannot longer be retrieved.
-* From plugin 3.0.0, the plugin uses bimmer_connected (https://github.com/bimmerconnected/bimmer_connected) in threading mode. It solves the problem with the vehicle status update by adding a workaround in the plugin.
-* From plugin 3.1.0  all functionality is used from the bimmer_connected library without specific code as workaround. Minimal version of the bimmer_connected library is 0.8.0.
-* From plugin 3.2.0, there is the need to install at least bimmer_connected library 0.9.0.0b17. Be aware that this library contains some compatibility breaking changes that impacted the plugin (eg using the Asyncio python mechanism). At the time of the update of the BMW plugin version 0.9.0.0b17 is still beta version.
-* From plugin 3.5.0, there is the need to install at least bimmer_connected library 0.17.0. BMW implemented a CAPTCHA at login requireing this library version. Due to this change the plugin is slightly reworked, meaning that the hardware settings requires to be reset.
-* From plugin 4.0.0, the plugin is completely refactored. It relies also on the Domoticz Extended Plugin framework now (hence using a new toolset DomoticzEx_tools.py). When moving to this version of the plugin, it will create new devices due to the use of DeviceID functionality of the Extended Plugin framework. Using the GUI functionality to replace devices is a perfect solution to avoid losing historical data, scripting functionality etc. It is highly recommended to take a backup before moving to the new version. As I don't have access to various models of cars, I was not able to test in all circumstances.
-* From plugin 4.0.0 there is a few functionality added:
-   * Charging can now be started immediately by clicking the "Charging" device. The "charge_now" option in the "Remote Services" is still working.
-   * Possibility to restrict the charging capacity from Domoticz, including synchronization with BMW Connected Drive
-   * Possibility to change the charging mode from Domoticz, including synchronization with BMW Connected Drive (mode "Unknown" can technically be selected, but has the same behavior as "no action").
+Since BMW blocked all access to the BMW Connected Drive, the [bimmer_connected](https://github.com/bimmerconnected/bimmer_connected) library is no longer operational.
+From plugin 5.0.0, the Domoticz-BMW-plugin is using data from the BMW Open Data Platform based on the official API from BMW, shortly called "CarData". For an introduction, please refer to [CarData Customer Portal](https://bmw-cardata.bmwgroup.com/customer/public/api-documentation/Id-Introduction).
+This has also an impact on the Domoticz-BMW-plugin functionality:
+* As CarData is "read-only", it cannot be used to activate/deactivate services towards the car. This means that the "remote services" are no longer supported by the Domoticz-BMW-plugin. For the same reason, also the charging limits and the charging mode can no longer be set. The Domoticz devices created for this purpose are automatically changed to an "unused" stage (you can still see them in the Hardware - Devices list).
+* BMW supports an "unlimited" streaming service for the CarData, ie an MQTT broker that sends the selected streaming keys. However new data is sent only when some status changes are effected at car level. When the car is "idle", no update is received. Even when an electric car is charging, from experience it shows that at a certain moment no updates are coming in...
+* BMW supports also an API to get data "on request", however there is a quota on the number of messages currently defined at 50. This means that it limits the speed of polling.
 
-It is highly considered to follow the bimmer_connected evolutions on https://github.com/bimmerconnected/bimmer_connected as BMW is highly refactoring. You can also find more information about the supported cars (and functionality). Not all functionality is backported to Domoticz (yet). If there is an interesting functionality to add, let me know.
+Domoticz-BMW-plugin take benefit from both possibilities, ie streaming and API requests. All streaming information coming in is processed. On top, there is a smart polling mechanism to actively update the information "on request". The smart polling algorthm will spread the available API Quota over the remaining day-time, taking into account the possible refresh of data through the streaming channel.
 
-Currently it supports the keep track of the following information:
+Currently the Domoticz-BMW-plugin supports tracking of the following information:
 * Mileage (several devices are created to followup the mileage)
 * Driving (indicates whether the car is driving or not)
 * Home (indicates whether the car is located within a defined area)
 * Doors, windows and car: open - closed
 * Remaining mileage for fuel and electric
-* Remote services: flash light, horn, activate airco/heating, lock/unlock car, start/stop charging (in case you installed a previous version without all these remote services, delete first the device in Domoticz, it will be recreated with all features afterwards)
 * In case of electric support:
     * Charging status
-    * Remaining charging time (working again as from version 3.1.0)
+    * Remaining charging time
     * Battery level
-    * Charging limits
-    * Charging mode
 
 If there are requests to integrate other information/functions, please leave a message.
 
-Today, the plugin does not support BMW Connected Drive cars in China and USA.
-
-Remark that using remote services heavily is blocked by BMW. They give a dedicated message back in that case (it will show up in the Domoticz log also). So fast executing remote service one after the other won't be successful.
-
 ## Installation (linux)
-Preliminary install bimmer_connected by with ```sudo pip3 install bimmer_connected``` or alternatively ```sudo pip3 install bimmer_connected==[version]``` to install a specific version.
-Be sure that the python3 module ```threading``` and ```queue``` is installed (otherwise install them also as described below).
+Preliminary install the python3 library paho-mqtt by with ```sudo pip3 install paho-mqtt```.
 
 Follow this procedure to install the plugin.
 * Go to "~/Domoticz/plugins" with the command ```cd ~/Domoticz/plugins```
 * Create directory "Bmw" with the command ```mkdir Bmw```
 * Copy all the files from github in the created directory
-* Be sure the following python3 libraries are installed: urllib, json, datetime
+* Be sure the following python3 libraries are installed: paho-mqtt, json, datetime
    * use ```pip3 <library>``` to verify if the libraries are installed
    * to install the missing libraries: ```sudo pip3 install <library>```
 
 ## Configuration
-Enter your BMW Connected Drive username and password, together with your with your VIN number (Vehicle Identification Number). The number can be found in your official BMW Connected Drive APP-Information.
+### Activation of BMW CarData
+The steps below summarize how to activate the BMW CarData service within the MyBMW portal. For a detailed, comprehensive guide, please visit the official [documentation](https://bmw-cardata.bmwgroup.com/customer/public/api-documentation/Id-Introduction).
+* Navigate to the MyBMW Portal, log in with your credentials, and go to the "Vehicle Overview" section.
+* Proceed to the "BMW CarData" section.
+* Scroll down to the "TECHNICAL ACCESS TO BMW CARDATA" section.
+* Click on "Create CarData-client" and ensure both "Request Access to CarData API" and "CarData Stream" options are activated.
+* Scroll to the "STREAM CARDATA" section and click "Change data selection.
+* Select all data keys you wish to include in the stream. Refer to the **Streaming Configuration** section below for required keys.
 
-## Technical configuration
-A Bmw.json file is available to update the technical configuration. This file is optional and when the file is not available, default values are used.
+### Plugin Configuration Parameters
+The following parameters are required for initial plugin setup:
+* **BMW CarData Client_id**: The unique value obtained from the MyBMW portal after creating the CarData Client.
+* **Vehicle Identification Number (VIN)**: The full, 17-character VIN of your BMW vehicle, used to identify the specific car to monitor.
+* **Min. Update Interval (Minutes)**: Defines the minimal interval (in minutes) at which the plugin will check for new data. If the smart polling would arrive at a shorter interval, it will be overwritten by this value.
+* **Debug Level**: Sets the logging verbosity. Higher levels provide more diagnostic information for troubleshooting purposes.
 
+### OAuth2 Authentication
+When the plugin is started for the first time, an authentication status message will appear in the Domoticz log. 
+Copy the complete verification URI, open it in your browser, and complete the process before the displayed expiry time (you may be prompted to re-enter your MyBMW username and password).
 ```
-{
-"EnteringHomeDistance (m)": 1000,
-"EnteringHomeDistance_FastPollingDistance (m)": 2000,
-"EnteringHomeDistance_FastPollingDelay (min)": 2
-}
+        ============================================================<
+        BMW CarData Authentication Required
+        ============================================================
+        User Code: [client_id]
+        Please visit: [verification_uri_complete]
+        Complete the authentication in your browser before 15:30:00...
+        ============================================================
 ```
+Upon successful authentication, you will see the confirmation message: "BMW CarData Authentication successful! Starting BMW CarData MQTT connection..." in the Domoticz log.
 
-* EnteringHomeDistance [default 1000]: indicate the distance (in meters) from the Domoticz location (set in the Domoticz system setup) to trigger the "Home" functionality. Once the car is within the indicate area, the Home device will be set to "on".
-* EnteringHomeDistance_FastPollingDistance (m) [default 2000]: indicate the distance (in meters) from the Domoticz location to increase the update of the BMW Status requests.
-* EnteringHomeDistance_FastPollingDelay (min) [default 2]: Delay between update of BMW Status readings. This delay will be applied once the car is at a distance lower than EnteringHomeDistance_FastPollingDistance.
+### Streaming configuration (Bmw_keys_streaming.json)
+The configuration file, "Bmw_keys_streaming.json," maps BMW CarData streaming keys to the corresponding implemented Domoticz devices. This JSON file supports multiple cars. The default settings should typically be correct and require no changes. The example shows configurations for a fuel car and a hybrid fuel/electric car.
+Ensure you update the configuration file with your specific VIN(s). You may add or remove VIN sections to monitor multiple or fewer vehicles.
+Don't forget to update the VIN to your specific car in the Bmw_keys_streaming.json file.
+
+Configuration Rules:
+* If a device status depends on **one single** BMW CarData key, list only that key (e.g., mileage information).
+* If a device status depends on data from **several** BMW CarData keys, use a JSON array.
+* If an option is removed or not required, deleting its entry from the JSON file will automatically set the corresponding Domoticz device to **UNUSED** (e.g., removing 'Charging' status for a gasoline-only vehicle).
+
+Note that information will only be available if the respective BMW CarData keys are actively included in the data stream (as configured in the **Activation of BMW CarData** chapter above).
+
+Example of the configuration file:
+```
+        "WBAJF11YYYYYYYYYY": {
+            "Mileage": "vehicle.vehicle.travelledDistance",
+            "Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],
+            "Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],
+            "Locked": "vehicle.cabin.door.status",
+            "Location": ["vehicle.cabin.infotainment.navigation.currentLocation.latitude", "vehicle.cabin.infotainment.navigation.currentLocation.longitude"],
+            "Driving": "vehicle.isMoving",
+            "RemainingRangeTotal": "vehicle.drivetrain.totalRemainingRange"
+        },
+        "WBA21EFXXXXXXXXXX": {
+            "Mileage": "vehicle.vehicle.travelledDistance",
+            "Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],
+            "Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],
+            "Locked": "vehicle.cabin.door.status",
+            "Location": ["vehicle.cabin.infotainment.navigation.currentLocation.latitude", "vehicle.cabin.infotainment.navigation.currentLocation.longitude"],
+            "Driving": "vehicle.isMoving",
+            "RemainingRangeTotal": "vehicle.drivetrain.totalRemainingRange",
+            "RemainingRangeElec": "vehicle.drivetrain.electricEngine.kombiRemainingElectricRange",
+            "Charging": "vehicle.drivetrain.electricEngine.charging.hvStatus",
+            "BatteryLevel": "vehicle.drivetrain.batteryManagement.header",
+            "ChargingTime": "vehicle.drivetrain.electricEngine.charging.timeRemaining"
+        }
+```
 
 ## Tips/Hints
-* you can use the remote services in combination with a script that looks to the Google Calendar... In this way it is possible to plan the start of the airco/heating.
 * you can create a small script that activate other devices one the car is detected coming "home". I personally use this to switch already on several devices so that my house is "ready" once arriving by car.
 
 ## Privacy

@@ -1,0 +1,25 @@
+{
+"WBAJFXXXXXXXXXXXX": {
+    "Mileage": "vehicle.vehicle.travelledDistance",
+    "Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],
+    "Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],
+    "Locked": "vehicle.cabin.door.status",
+    "Location": ["vehicle.cabin.infotainment.navigation.currentLocation.latitude", "vehicle.cabin.infotainment.navigation.currentLocation.longitude"],
+    "Driving": "vehicle.isMoving",
+    "RemainingRangeTotal": "vehicle.drivetrain.lastRemainingRange"
+    },
+"WBA21YYYYYYYYYYYY": {
+    "Mileage": "vehicle.vehicle.travelledDistance",
+    "Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],
+    "Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],
+    "Locked": "vehicle.cabin.door.status",
+    "Location": ["vehicle.cabin.infotainment.navigation.currentLocation.latitude", "vehicle.cabin.infotainment.navigation.currentLocation.longitude"],
+    "Driving": "vehicle.isMoving",
+    "RemainingRangeTotal": "vehicle.drivetrain.lastRemainingRange",
+    "RemainingRangeElec": "vehicle.drivetrain.electricEngine.kombiRemainingElectricRange",
+    "Charging": "vehicle.drivetrain.electricEngine.charging.status",
+    "ChargingTime": "vehicle.drivetrain.electricEngine.charging.timeToFullyCharged",
+    "ChargingACLimit": "vehicle.powertrain.electric.battery.charging.acLimit.selected",
+    "BatteryLevel": "vehicle.drivetrain.batteryManagement.header"
+    }
+}
