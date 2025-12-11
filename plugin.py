@@ -12,8 +12,11 @@ Version: 5.0.0
 License: MIT
 """
 """
-<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.0.0">
+<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.0.0" externallink="https://github.com/FilipDem/Domoticz-BMW-plugin">
     <description>
+        <h2>BMW CarData Plugin</h2>
+        <p>Version 5.0.0</p>
+        <br/>
         <h2>Introduction</h2>
         <p>The BMW CarData plugin provides a robust and seamless integration of your BMW vehicle with the Domoticz home automation system, essentially transforming Domoticz into a comprehensive command center for your car.</p>
         <p>Upon successful configuration, the plugin automatically creates a suite of virtual devices within Domoticz. These devices represent key aspects of your BMW's status, including mileage, door and window lock states, fuel and electric range, charging status, and the vehicle's real-time location and movement.</p>
