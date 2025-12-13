@@ -12,10 +12,10 @@ Version: 5.0.0
 License: MIT
 """
 """
-<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.0.0" externallink="https://github.com/FilipDem/Domoticz-BMW-plugin">
+<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.0.1" externallink="https://github.com/FilipDem/Domoticz-BMW-plugin">
     <description>
         <h2>BMW CarData Plugin</h2>
-        <p>Version 5.0.0</p>
+        <p>Version 5.0.1</p>
         <br/>
         <h2>Introduction</h2>
         <p>The BMW CarData plugin provides a robust and seamless integration of your BMW vehicle with the Domoticz home automation system, essentially transforming Domoticz into a comprehensive command center for your car.</p>
@@ -24,16 +24,9 @@ License: MIT
         <p>It is important to note that this plugin is entirely dependent on the data made available by the BMW Open Data Platform. The BMW CarData plugin utilizes the Streaming API (MQTT-based) to retrieve vehicle information, meaning there is no periodic polling by the Domoticz API towards the BMW Open Data Platform. For detailed information, please refer to the official resource: <a href="https://bmw-cardata.bmwgroup.com/thirdparty/public/car-data/overview">https://bmw-cardata.bmwgroup.com/thirdparty/public/car-data/overview</a>.</p>
         <p>Keep in mind that no data is sent by the BMW Open Data Platform in streaming mode when not any event happens at car level.</p>
         <br/>
-        <h2>Activation of BMW CarData</h2>
-        <p>The steps below summarize how to activate the BMW CarData service within the MyBMW portal. For a detailed, comprehensive guide, please visit the official documentation: <a href="https://bmw-cardata.bmwgroup.com/customer/public/api-documentation/Id-Introduction">https://bmw-cardata.bmwgroup.com/customer/public/api-documentation/Id-Introduction</a>.</p>
-        <ul>
-            <li>Navigate to the MyBMW Portal, log in with your credentials, and go to the "Vehicle Overview" section.</li>
-            <li>Proceed to the "BMW CarData" section.</li>
-            <li>Scroll down to the "TECHNICAL ACCESS TO BMW CARDATA" section.</li>
-            <li>Click on "Create CarData-client" and ensure both "Request Access to CarData API" and "CarData Stream" options are activated.</li>
-            <li>Scroll to the "STREAM CARDATA" section and click "Change data selection."</li>
-            <li>Select all data keys you wish to include in the stream. Refer to the **Streaming Configuration** section below for required keys.</li>
-        </ul>
+        <h2>= Activation of BMW CarData =</h2>
+        <br/>
+        <p style="color: yellow;">Read carefully the README file and follow each step carefully</p>
         <br/>
         <h2>Configuration Parameters</h2>
         <p>The following parameters are required for initial plugin setup:</p>
