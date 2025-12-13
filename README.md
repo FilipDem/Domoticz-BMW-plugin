@@ -1,7 +1,9 @@
-# 🔌 Domoticz-BMW-Plugin
+# 🚗 Domoticz-BMW-Plugin
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.6%2B-blue.svg)](https://www.python.org/)
+![Status](https://img.shields.io/badge/Status-Stable-brightgreen)
+![Domoticz](https://img.shields.io/badge/Domoticz-2022%2B-blue)
+![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
 ---
 
@@ -9,7 +11,7 @@
 
 The **old `bimmer_connected` API** is no longer functional due to restrictions on BMW's side.
 
-* ✅ This plugin (from version 5.0.0 onwards) uses the **official BMW Open Data API (CarData)**.
+* This plugin (from version 5.0.0 onwards) uses the **official BMW Open Data API (CarData)**.
 * The code utilizing the official API is available in the **`CarData`** branch.
 
 ---
@@ -59,6 +61,10 @@ Follow these steps to install the Domoticz-BMW plugin:
     git clone https://github.com/FilipDem/Domoticz-BMW-plugin
     ```
 
+4.  **update the repository:**
+    ```bash
+    git pull
+    ```
 ---
 
 ## 4. ⚙️ Configuration
