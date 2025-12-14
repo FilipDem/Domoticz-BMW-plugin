@@ -174,13 +174,12 @@ Developing and maintaining this plugin required considerable effort. Small contr
 
 ### 6.1 Via Mobile Banking (QR Code)
 
-Scan the QR codes below. They comply with the **EPC069-12 European Standard** for SEPA Credit Transfers (SCT).
+Use your Mobile Banking App and scan the QR Code
+The QR codes comply the EPC069-12 European Standard for SEPA Credit Transfers ([SCT](https://www.europeanpaymentscouncil.eu/sites/default/files/KB/files/EPC069-12%20v2.1%20Quick%20Response%20Code%20-%20Guidelines%20to%20Enable%20the%20Data%20Capture%20for%20the%20Initiation%20of%20a%20SCT.pdf)). The amount of the donation can possibly be modified in your Mobile Banking App.
+| 5 EUR      | 10 EUR      |
+|------------|-------------|
+| <img src="https://user-images.githubusercontent.com/16196363/110995432-a4db0d00-837a-11eb-99b4-e7059a85b68d.png" width="80" height="80"> | <img src="https://user-images.githubusercontent.com/16196363/110995495-bb816400-837a-11eb-9f71-8139df49e3fe.png" width="80" height="80"> |
 
-> You can adjust the donation amount in your banking app.
-
-| 5 EUR | 10 EUR |
-| :---: | :---: |
-| <img src="https://user-images.githubusercontent.com/16196363/110995432-a4db0d00-837a-11eb-99b4-e7059a85b68d.png" width="100" height="100"> | <img src="https://user-images.githubusercontent.com/16196363/110995495-bb816400-837a-11eb-9f71-8139df49e3fe.png" width="100" height="100"> |
 
 ### 6.2 Via PayPal
 
