@@ -12,7 +12,7 @@
 The **old `bimmer_connected` API** is no longer functional due to restrictions on BMW's side.
 
 * This plugin (from version 5.0.0 onwards) uses the **official BMW Open Data API (CarData)**.
-* The code utilizing the official API is available in the **`CarData`** branch.
+* The code utilizing the official API is available in the **`Main`** branch.
 
 ---
 
