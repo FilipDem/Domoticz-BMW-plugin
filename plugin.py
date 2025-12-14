@@ -27,8 +27,9 @@ License: MIT
         <h2>= Activation of BMW CarData =</h2>
         <br/>
         <p style="color: yellow;">Read carefully the README file and follow each step carefully</p>
+        <a href="https://github.com/FilipDem/Domoticz-BMW-plugin" target="_blank">via the GitHub-page og this plugin</a>
         <br/>
-        <h2>Configuration Parameters</h2>
+        <br/><h2>Configuration Parameters</h2>
         <p>The following parameters are required for initial plugin setup:</p>
         <ul>
             <li><b>BMW CarData Client_id</b>: The unique value obtained from the MyBMW portal after creating the CarData Client.</li>
