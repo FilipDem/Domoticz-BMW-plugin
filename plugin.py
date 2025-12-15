@@ -12,8 +12,11 @@ Version: 5.0.0
 License: MIT
 """
 """
-<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.0.0">
+<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.0.1" externallink="https://github.com/FilipDem/Domoticz-BMW-plugin">
     <description>
+        <h2>BMW CarData Plugin</h2>
+        <p>Version 5.0.1</p>
+        <br/>
         <h2>Introduction</h2>
         <p>The BMW CarData plugin provides a robust and seamless integration of your BMW vehicle with the Domoticz home automation system, essentially transforming Domoticz into a comprehensive command center for your car.</p>
         <p>Upon successful configuration, the plugin automatically creates a suite of virtual devices within Domoticz. These devices represent key aspects of your BMW's status, including mileage, door and window lock states, fuel and electric range, charging status, and the vehicle's real-time location and movement.</p>
@@ -21,18 +24,12 @@ License: MIT
         <p>It is important to note that this plugin is entirely dependent on the data made available by the BMW Open Data Platform. The BMW CarData plugin utilizes the Streaming API (MQTT-based) to retrieve vehicle information, meaning there is no periodic polling by the Domoticz API towards the BMW Open Data Platform. For detailed information, please refer to the official resource: <a href="https://bmw-cardata.bmwgroup.com/thirdparty/public/car-data/overview">https://bmw-cardata.bmwgroup.com/thirdparty/public/car-data/overview</a>.</p>
         <p>Keep in mind that no data is sent by the BMW Open Data Platform in streaming mode when not any event happens at car level.</p>
         <br/>
-        <h2>Activation of BMW CarData</h2>
-        <p>The steps below summarize how to activate the BMW CarData service within the MyBMW portal. For a detailed, comprehensive guide, please visit the official documentation: <a href="https://bmw-cardata.bmwgroup.com/customer/public/api-documentation/Id-Introduction">https://bmw-cardata.bmwgroup.com/customer/public/api-documentation/Id-Introduction</a>.</p>
-        <ul>
-            <li>Navigate to the MyBMW Portal, log in with your credentials, and go to the "Vehicle Overview" section.</li>
-            <li>Proceed to the "BMW CarData" section.</li>
-            <li>Scroll down to the "TECHNICAL ACCESS TO BMW CARDATA" section.</li>
-            <li>Click on "Create CarData-client" and ensure both "Request Access to CarData API" and "CarData Stream" options are activated.</li>
-            <li>Scroll to the "STREAM CARDATA" section and click "Change data selection."</li>
-            <li>Select all data keys you wish to include in the stream. Refer to the **Streaming Configuration** section below for required keys.</li>
-        </ul>
+        <h2>= Activation of BMW CarData =</h2>
         <br/>
-        <h2>Configuration Parameters</h2>
+        <p style="color: yellow;">Read carefully the README file and follow each step carefully</p>
+        <a href="https://github.com/FilipDem/Domoticz-BMW-plugin" target="_blank">via the GitHub-page og this plugin</a>
+        <br/>
+        <br/><h2>Configuration Parameters</h2>
         <p>The following parameters are required for initial plugin setup:</p>
         <ul>
             <li><b>BMW CarData Client_id</b>: The unique value obtained from the MyBMW portal after creating the CarData Client.</li>
@@ -41,56 +38,6 @@ License: MIT
             <li><b>Debug Level</b>: Sets the logging verbosity. Higher levels provide more diagnostic information for troubleshooting purposes.</li>
         </ul>
         <br/>
-        <h2>OAuth2 Authentication</h2>
-        <p>When the plugin is started for the first time, an authentication status message will appear in the Domoticz log. Copy the complete verification URI, open it in your browser, and complete the process before the displayed expiry time (you may be prompted to re-enter your MyBMW username and password).</p>
-        <pre><code>
-        ============================================================<br/>
-        BMW CarData Authentication Required<br/>
-        ============================================================<br/>
-        User Code: [client_id]<br/>
-        Please visit: [verification_uri_complete]<br/>
-        Complete the authentication in your browser before 15:30:00...<br/>
-        ============================================================<br/>
-        </code></pre>
-        <p>Upon successful authentication, you will see the confirmation message: "BMW CarData Authentication successful! Starting BMW CarData MQTT connection..." in the Domoticz log.</p>
-        <br/>
-        <h2>Streaming configuration (Bmw_keys_streaming.json)</h2>
-        <p>The configuration file, "Bmw_keys_streaming.json," maps BMW CarData streaming keys to the corresponding implemented Domoticz devices. This JSON file supports multiple cars. The default settings should typically be correct and require no changes. The example shows configurations for a fuel car and a hybrid fuel/electric car.</p>
-        <p>Ensure you update the configuration file with your specific VIN(s). You may add or remove VIN sections to monitor multiple or fewer vehicles.</p>
-        <p>Configuration Rules:</p>
-        <ul>
-            <li>If a device status depends on **one single** BMW CarData key, list only that key (e.g., mileage information).</li>
-            <li>If a device status depends on data from **several** BMW CarData keys, use a JSON array.</li>
-            <li>If an option is removed or not required, deleting its entry from the JSON file will automatically set the corresponding Domoticz device to **UNUSED** (e.g., removing 'Charging' status for a gasoline-only vehicle).</li>
-        </ul>
-        <p>Note that information will only be available if the respective BMW CarData keys are actively included in the data stream (as configured in the "Activation of BMW CarData" chapter above).</p>
-        <p>Example of the configuration file:</p>
-        <pre><code>
-        {<br/>
-        "WBAJF11YYYYYYYYYY": {<br/>
-        &#9;"Mileage": "vehicle.vehicle.travelledDistance",<br/>
-        &#9;"Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],<br/>
-        &#9;"Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],<br/>
-        &#9;"Locked": "vehicle.cabin.door.status",<br/>
-        &#9;"Location": ["vehicle.cabin.infotainment.navigation.currentLocation.latitude", "vehicle.cabin.infotainment.navigation.currentLocation.longitude"],<br/>
-        &#9;"Driving": "vehicle.isMoving",<br/>
-        &#9;"RemainingRangeTotal": "vehicle.drivetrain.totalRemainingRange"<br/>
-        &#9;},<br/>
-        "WBA21EFXXXXXXXXXX": {<br/>
-        &#9;"Mileage": "vehicle.vehicle.travelledDistance",<br/>
-        &#9;"Doors": ["vehicle.cabin.door.row1.driver.isOpen", "vehicle.cabin.door.row1.passenger.isOpen", "vehicle.cabin.door.row2.driver.isOpen", "vehicle.cabin.door.row2.passenger.isOpen", "vehicle.body.trunk.door.isOpen"],<br/>
-        &#9;"Windows": ["vehicle.cabin.window.row1.driver.status", "vehicle.cabin.window.row1.passenger.status", "vehicle.cabin.window.row2.driver.status", "vehicle.cabin.window.row2.passenger.status", "vehicle.cabin.sunroof.overallStatus"],<br/>
-        &#9;"Locked": "vehicle.cabin.door.status",<br/>
-        &#9;"Location": ["vehicle.cabin.infotainment.navigation.currentLocation.latitude", "vehicle.cabin.infotainment.navigation.currentLocation.longitude"],<br/>
-        &#9;"Driving": "vehicle.isMoving",<br/>
-        &#9;"RemainingRangeTotal": "vehicle.drivetrain.totalRemainingRange",<br/>
-        &#9;"RemainingRangeElec": "vehicle.drivetrain.electricEngine.kombiRemainingElectricRange",<br/>
-        &#9;"Charging": "vehicle.drivetrain.electricEngine.charging.hvStatus",<br/>
-        &#9;"BatteryLevel": "vehicle.drivetrain.batteryManagement.header",<br/>
-        &#9;"ChargingTime": "vehicle.drivetrain.electricEngine.charging.timeRemaining"<br/>
-        &#9;}<br/>
-        }<br/>
-        </code></pre>
     </description>
     <params>
         <param field="Mode1" label="BMW CarData Client_id" width="200px" required="true" default=""/>
