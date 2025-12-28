@@ -8,7 +8,7 @@ It uses the offical BMW's API (CarData) and creates
 corresponding devices in Domoticz.
 
 Author: Filip Demaertelaere
-Version: 5.0.0
+Version: 5.0.1
 License: MIT
 """
 """
@@ -739,7 +739,7 @@ class OAuth2Handler:
                 # Display user instructions (first time in this state)
                 user_code: str = data['user_code']
                 AuthenticationData.device_code = data['device_code']
-                verification_uri_complete: str = data['verification_uri_complete']
+                verification_uri_complete = data.get('verification_uri_complete',f"{data.get('verification_uri')}?user_code={data.get('user_code')}")
                 AuthenticationData.expires_in = data['expires_in']
                 AuthenticationData.interval = data.get('interval', Domoticz.Heartbeat())
 
