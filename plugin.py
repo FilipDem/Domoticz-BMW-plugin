@@ -659,6 +659,10 @@ class OAuth2Handler:
             elif status in ['400', '401', '403']:
                 error: str = response_data.get('error', '')
                 if error == 'authorization_pending':
+                    if AuthenticationData.interval is None:
+                        Domoticz.Error("BMW: OAuth interval ontbreekt, default 3600s gebruikt")
+                        AuthenticationData.interval = 3600
+
                     self.parent.runAgainOAuth = AuthenticationData.interval // Domoticz.Heartbeat()
                 elif error == 'slow_down':
                     AuthenticationData.interval += Domoticz.Heartbeat()
@@ -739,7 +743,10 @@ class OAuth2Handler:
                 # Display user instructions (first time in this state)
                 user_code: str = data['user_code']
                 AuthenticationData.device_code = data['device_code']
-                verification_uri_complete: str = data['verification_uri_complete']
+                verification_uri_complete = data.get(
+                    'verification_uri_complete',
+                    f"{data.get('verification_uri')}?user_code={data.get('user_code')}"
+                )
                 AuthenticationData.expires_in = data['expires_in']
                 AuthenticationData.interval = data.get('interval', Domoticz.Heartbeat())
 
@@ -752,7 +759,10 @@ class OAuth2Handler:
                 text += '\n' + '=' * 60
 
                 Domoticz.Status(text)
-                self.parent.runAgainOAuth = AuthenticationData.interval // Domoticz.Heartbeat()
+                verification_uri_complete = data.get(
+                    'verification_uri_complete',
+                    f"{data.get('verification_uri')}?user_code={data.get('user_code')}"
+                )
             else:
                 # Poll for tokens
                 Domoticz.Debug('Polling for the user action to get the tokens.')
