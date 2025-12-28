@@ -96,6 +96,7 @@ class UnitIdentifiers(IntEnum):
     HOME = auto()
     AC_LIMITS = auto()
     CHARGING_MODE = auto()
+    CLIMATE = auto()
 
 class Authenticate(IntEnum):
     """State machine during authentication"""
@@ -1505,6 +1506,13 @@ class BasePlugin:
         if get_unit(Devices, Parameters['Name'], UnitIdentifiers.CHARGING_MODE):
             update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_MODE, Used=0 )
 
+        # Climate status
+        if not ( streaming_keys := self.streamingKeys.get('Climate', None) ):
+            update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CLIMATE, Used=0 )
+        else:
+            if status := self._get_status_from_streaming_keys('Climate', streaming_keys, bool):
+                update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CLIMATE,
+                               1 if status[0] else 0, 100 if status[0] else 0)
 
     def _get_status_from_streaming_keys(
         self, 
@@ -1670,6 +1678,13 @@ class BasePlugin:
         # NOT USED:  Create device for Charging Mode
         if get_unit(Devices, Parameters['Name'], UnitIdentifiers.CHARGING_MODE):
             update_device( False, Devices, Parameters['Name'], UnitIdentifiers.CHARGING_MODE, Used=0 )
+
+        # Create climate status device
+        if not get_unit(Devices, Parameters['Name'], UnitIdentifiers.CLIMATE):
+            Domoticz.Unit(
+                DeviceID=Parameters['Name'], Unit=UnitIdentifiers.CLIMATE, Name=f"{Parameters['Name']} - Climate",
+                Type=244, Subtype=73, Switchtype=0, Image=Images[_IMAGE].ID, Used=0
+            ).Create()
 
 global _plugin
 _plugin = BasePlugin()
