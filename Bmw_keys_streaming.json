@@ -20,6 +20,7 @@
     "Charging": "vehicle.drivetrain.electricEngine.charging.status",
     "ChargingTime": "vehicle.drivetrain.electricEngine.charging.timeToFullyCharged",
     "ChargingACLimit": "vehicle.powertrain.electric.battery.charging.acLimit.selected",
-    "BatteryLevel": "vehicle.drivetrain.batteryManagement.header"
+    "BatteryLevel": "vehicle.drivetrain.batteryManagement.header",
+    "Climate": "vehicle​.drivetrain​.electricEngine​.charging​.profile​.climatizationActive"
     }
 }
