@@ -1017,7 +1017,7 @@ class CarDataAPIHandler:
 
         # Errors not specifically handled
         else:
-            if status in (500):
+            if status in (500, ):
                 Domoticz.Status(f"BMW CarData API Error (rc={status} - internal state={APIData.state_machine}): {data}.")
             else:
                 Domoticz.Error(f"BMW CarData API Error (rc={status} - internal state={APIData.state_machine}): {data}.")
