@@ -1124,7 +1124,7 @@ class CarDataAPIHandler:
             }
 
             Domoticz.Debug(f'List containers.')
-            self.parent.api.Send( {'Verb':'GET', 'URL':f"{CarDataURLs.CONTAINER_URI}", 'Headers':headers} )
+            self.parent.api.Send( {'Verb':'GET', 'URL':CarDataURLs.CONTAINER_URI, 'Headers':headers} )
 
     def _get_telematic_data(self) -> None:
         """Sends an HTTP GET request to retrieve the latest telematic data for the vehicle."""
