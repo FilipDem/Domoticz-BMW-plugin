@@ -1109,7 +1109,7 @@ class CarDataAPIHandler:
             }
 
             Domoticz.Debug(f'Delete container {del_container_id}.')
-            self.parent.api.Send( {'Verb':'DELETE', 'URL':f"{CarDataURLs.CONTAINER_URI}/{del_container_id}", 'Headers':headers} )
+            self.parent.api.Send( {'Verb':'DELETE', 'URL':f"{CarDataURLs.CONTAINER_URI.value}/{del_container_id}", 'Headers':headers} )
 
     def _list_container(self) -> None:
         """Sends an HTTP GET request to the BMW API to receive a list of current CarData containers."""
@@ -1125,7 +1125,7 @@ class CarDataAPIHandler:
             }
 
             Domoticz.Debug(f'List containers.')
-            self.parent.api.Send( {'Verb':'GET', 'URL':f"{CarDataURLs.CONTAINER_URI}", 'Headers':headers} )
+            self.parent.api.Send( {'Verb':'GET', 'URL':CarDataURLs.CONTAINER_URI, 'Headers':headers} )
 
     def _get_telematic_data(self) -> None:
         """Sends an HTTP GET request to retrieve the latest telematic data for the vehicle."""
