@@ -8,14 +8,14 @@ It uses the offical BMW's API (CarData) and creates
 corresponding devices in Domoticz.
 
 Author: Filip Demaertelaere
-Version: 5.0.0
+Version: 5.0.3
 License: MIT
 """
 """
-<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.0.1" externallink="https://github.com/FilipDem/Domoticz-BMW-plugin">
+<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.0.3" externallink="https://github.com/FilipDem/Domoticz-BMW-plugin">
     <description>
         <h2>BMW CarData Plugin</h2>
-        <p>Version 5.0.1</p>
+        <p>Version 5.0.3</p>
         <br/>
         <h2>Introduction</h2>
         <p>The BMW CarData plugin provides a robust and seamless integration of your BMW vehicle with the Domoticz home automation system, essentially transforming Domoticz into a comprehensive command center for your car.</p>
@@ -116,6 +116,7 @@ class CarDataURLs(str, Enum):
     API_PORT = '443'
     API_VERSION = 'v1'
     DEVICE_CODE_URI = '/gcdm/oauth/device/code'
+    DEVICE_CODE_LINK = 'https://customer.bmwgroup.com/oneid/link'
     TOKEN_URI = '/gcdm/oauth/token'
     CONTAINER_URI = '/customers/containers'
     GET_TELEMATICDATA_URI = '/customers/vehicles/{vin}/telematicData'
@@ -128,7 +129,7 @@ class AuthenticationData:
     code_verifier: str = None
     device_code: str = None
     expires_in: int = None
-    interval: int = None
+    interval: int = 10
 
 class API(IntEnum):
     """State machine during authentication"""
@@ -238,6 +239,7 @@ class PollingHandler:
         self.last_reset_day: Union[datetime, None] = None
         # next_api_call_time is the target time for the next call
         self.next_api_call_time: datetime = datetime.now()
+        self.quota_warning_giving: bool = False
         
     def load_state(self) -> None:
         """Loads persistent state for polling from the Domoticz database."""
@@ -251,6 +253,9 @@ class PollingHandler:
         except:
             # Initialize to today's midnight if no state is found
             self.last_reset_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        self.calculate_next_time_call()
+        Domoticz.Status(f'Quota information restored from database: calls_made_today={self.calls_made_today}; last_reset_day={self.last_reset_day}: next_api_call: {self.next_api_call_time}.')
 
     def _save_state(self) -> None:
         """Internal method to save persistent state for polling to the Domoticz database."""
@@ -282,7 +287,11 @@ class PollingHandler:
             Domoticz.Debug(f'API Polling Quota reset for new day. Calls made yesterday: {self.calls_made_today}.')
             self.calls_made_today = 0
             self.last_reset_day = current_day
-        
+
+    def get_quota(self) -> int:
+        """Get the current used daily API quota."""
+        return self.calls_made_today
+
     def register_api_call(self) -> None:
         """Registers a successful API call, updates state, and schedules the next call."""
         self._reset_quota()
@@ -336,11 +345,13 @@ class PollingHandler:
                 Domoticz.Debug(f'Quota near limit. Spreading {reserve_calls_to_spread} reserve calls over {time_until_midnight_sec}s. Next interval: {interval_sec}s.')
             else:
                 # Quota fully exhausted (calls_available == 0) OR too early for reserve.
-                Domoticz.Status('BMW CarData API daily quota fully exhausted and too early to use reserve calls. Waiting until midnight for triggering new API updates.')
+                if not self.quota_warning_giving:
+                    Domoticz.Status(f'BMW CarData API daily quota fully exhausted and too early to use reserve calls (quota={self.DAILY_QUOTA}; used={self.calls_made_today}). Waiting until midnight for triggering new API updates.')
+                    self.quota_warning_giving = True
                 interval_sec = time_until_midnight_sec # Wait until midnight
 
         # Calculate next call time and return interval in heartbeat ticks
-        self.next_api_call_time = now + timedelta(seconds=interval_sec)
+        self.next_api_call_time = now + timedelta(seconds=interval_sec+1)
         
 class MqttClientHandler:
     """
@@ -575,8 +586,8 @@ class MqttClientHandler:
 
         # Check for clean disconnect (rc=0) 
         if rc == 0:
-            #Domoticz.Status(f'Normal disconnection from MQTT broker ({rc}); reconnect again: {reconnect}.')
-            Domoticz.Debug(f'Normal disconnection from MQTT broker ({rc}); reconnect again: {reconnect}.')
+            #Domoticz.Status(f'Normal disconnection from MQTT broker ({rc})')
+            Domoticz.Debug(f'Normal disconnection from MQTT broker ({rc}).')
             # Only reconnect if decent reconnection was done
             #if reconnect:
             #    self.connect_mqtt()
@@ -659,10 +670,6 @@ class OAuth2Handler:
             elif status in ['400', '401', '403']:
                 error: str = response_data.get('error', '')
                 if error == 'authorization_pending':
-                    if AuthenticationData.interval is None:
-                        Domoticz.Error("BMW: OAuth interval ontbreekt, default 3600s gebruikt")
-                        AuthenticationData.interval = 3600
-
                     self.parent.runAgainOAuth = AuthenticationData.interval // Domoticz.Heartbeat()
                 elif error == 'slow_down':
                     AuthenticationData.interval += Domoticz.Heartbeat()
@@ -743,10 +750,11 @@ class OAuth2Handler:
                 # Display user instructions (first time in this state)
                 user_code: str = data['user_code']
                 AuthenticationData.device_code = data['device_code']
-                verification_uri_complete = data.get(
-                    'verification_uri_complete',
-                    f"{data.get('verification_uri')}?user_code={data.get('user_code')}"
-                )
+                verification_uri_complete: str = data.get('verification_uri_complete', '')
+                if not verification_uri_complete:
+                    verification_uri_complete = f"{data['verification_uri']}?user_code={user_code}"
+                else:
+                    verification_uri_complete = DEVICE_CODE_LINK
                 AuthenticationData.expires_in = data['expires_in']
                 AuthenticationData.interval = data.get('interval', Domoticz.Heartbeat())
 
@@ -759,10 +767,7 @@ class OAuth2Handler:
                 text += '\n' + '=' * 60
 
                 Domoticz.Status(text)
-                verification_uri_complete = data.get(
-                    'verification_uri_complete',
-                    f"{data.get('verification_uri')}?user_code={data.get('user_code')}"
-                )
+                self.parent.runAgainOAuth = AuthenticationData.interval // Domoticz.Heartbeat()
             else:
                 # Poll for tokens
                 Domoticz.Debug('Polling for the user action to get the tokens.')
@@ -1006,14 +1011,47 @@ class CarDataAPIHandler:
         # exveErrorId="CU-429"; exveErrorMsg="API rate limit reached"
         elif response_data and status == '429':
             if response_data.get('exveErrorId', None) == 'CU-429':
+                Domoticz.Status(f'BMW CarData API messages received that quota is fully exhausted ({self.parent.polling_handler.get_quota()} API calls used today).')
                 self.parent.polling_handler.set_quota_exhausted()
 
         # Errors not specifically handled
         else:
-            if status in (500):
-                Domoticz.Status(f"BMW CarData API Error (rc={status} - internal state={APIData.state_machine}): {data}.")
+            friendly_msg = "Onbekende BMW API fout"
+            error_id = None
+
+            try:
+                if isinstance(data, (bytes, bytearray)):
+                    data_json = json.loads(data.decode("utf-8"))
+                elif isinstance(data, dict) and "Data" in data:
+                    data_json = json.loads(data["Data"].decode("utf-8"))
+                else:
+                    data_json = data
+
+                error_id = data_json.get("exveErrorId")
+                error_msg = data_json.get("exveErrorMsg")
+
+                if status == 403 and error_id == "CU-105":
+                    friendly_msg = (
+                        "Geen toegang tot voertuigdata. "
+                        "Het voertuig is niet (meer) gekoppeld aan dit BMW-account."
+                    )
+                else:
+                    friendly_msg = error_msg or friendly_msg
+
+            except Exception as e:
+                Domoticz.Debug(f"BMW error parsing failed: {e}")
+
+            # Gebruiksvriendelijke log
+            if status in (500,):
+                Domoticz.Status(f"BMW API fout ({status}): {friendly_msg}")
             else:
-                Domoticz.Error(f"BMW CarData API Error (rc={status} - internal state={APIData.state_machine}): {data}.")
+                Domoticz.Error(f"BMW API fout ({status}): {friendly_msg}")
+
+            # Volledige details alleen in debug
+            Domoticz.Debug(
+                f"BMW API details: rc={status}, state={APIData.state_machine}, raw={data}"
+            )
+
             # Reset state machine in case of error in listing container as the list of containers is only informative
             if APIData.state_machine == API.LIST_CONTAINER:
                 APIData.state_machine = API.GET_CONTAINER
@@ -1102,7 +1140,7 @@ class CarDataAPIHandler:
             }
 
             Domoticz.Debug(f'Delete container {del_container_id}.')
-            self.parent.api.Send( {'Verb':'DELETE', 'URL':f"{CarDataURLs.CONTAINER_URI}/{del_container_id}", 'Headers':headers} )
+            self.parent.api.Send( {'Verb':'DELETE', 'URL':f"{CarDataURLs.CONTAINER_URI.value}/{del_container_id}", 'Headers':headers} )
 
     def _list_container(self) -> None:
         """Sends an HTTP GET request to the BMW API to receive a list of current CarData containers."""
@@ -1118,7 +1156,7 @@ class CarDataAPIHandler:
             }
 
             Domoticz.Debug(f'List containers.')
-            self.parent.api.Send( {'Verb':'GET', 'URL':f"{CarDataURLs.CONTAINER_URI}", 'Headers':headers} )
+            self.parent.api.Send( {'Verb':'GET', 'URL':CarDataURLs.CONTAINER_URI, 'Headers':headers} )
 
     def _get_telematic_data(self) -> None:
         """Sends an HTTP GET request to retrieve the latest telematic data for the vehicle."""
@@ -1302,6 +1340,8 @@ class BasePlugin:
                 # Polling waiting for user interaction
                 self.auth_handler.authenticate()
             elif AuthenticationData.state_machine == Authenticate.ERROR:
+                if self.mqtt_handler.is_mqtt_connected():
+                    self.mqtt_handler.disconnect_mqtt()
                 # Restart authentication in cause of error
                 AuthenticationData.state_machine = Authenticate.INIT
                 self.auth_handler.authenticate()
