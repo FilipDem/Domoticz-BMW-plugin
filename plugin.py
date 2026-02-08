@@ -8,14 +8,14 @@ It uses the offical BMW's API (CarData) and creates
 corresponding devices in Domoticz.
 
 Author: Filip Demaertelaere
-Version: 5.0.0
+Version: 5.1.0
 License: MIT
 """
 """
-<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.0.2" externallink="https://github.com/FilipDem/Domoticz-BMW-plugin">
+<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.1.0" externallink="https://github.com/FilipDem/Domoticz-BMW-plugin">
     <description>
         <h2>BMW CarData Plugin</h2>
-        <p>Version 5.0.2</p>
+        <p>Version 5.1.0</p>
         <br/>
         <h2>Introduction</h2>
         <p>The BMW CarData plugin provides a robust and seamless integration of your BMW vehicle with the Domoticz home automation system, essentially transforming Domoticz into a comprehensive command center for your car.</p>
@@ -251,8 +251,8 @@ class PollingHandler:
         try:
             self.last_reset_day = datetime.fromisoformat(last_reset_day_str)
         except:
-            # Initialize to today's midnight if no state is found
-            self.last_reset_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            # Initialize to yesterdays's midnight if no state is found
+            self.last_reset_day = (datetime.now() + timedelta(days=-1)).replace(hour=0, minute=0, second=0, microsecond=0)
 
         self.calculate_next_time_call()
         Domoticz.Status(f'Quota information restored from database: calls_made_today={self.calls_made_today}; last_reset_day={self.last_reset_day}: next_api_call: {self.next_api_call_time}.')
@@ -261,7 +261,7 @@ class PollingHandler:
         """Internal method to save persistent state for polling to the Domoticz database."""
         state = {
             'calls_made_today': self.calls_made_today,
-            'last_reset_day': self.last_reset_day.isoformat() if self.last_reset_day else None,
+            'last_reset_day': self.last_reset_day.isoformat() if self.last_reset_day else None
         }
         set_config_item_db(key='polling_handler', value=state)
 
@@ -271,22 +271,26 @@ class PollingHandler:
 
     def set_quota_exhausted(self) -> None:
         """Registers a successful API call, updates state, and schedules the next call."""
-        self._reset_quota()
-        self.calls_made_today = self.DAILY_QUOTA
-        
-        # Schedule the next call immediately after registering a successful one
-        self.calculate_next_time_call() 
-        Domoticz.Debug('Force quota as exhausted due to API return error.')
+        if not self._reset_quota():
+            self.calls_made_today = self.DAILY_QUOTA
+            # Schedule the next call immediately after registering a successful one
+            self.calculate_next_time_call() 
+            Domoticz.Debug('Force quota as exhausted due to API return error.')
 
-    def _reset_quota(self) -> None:
-        """Resets the daily quota if a new day has started (at midnight)."""
-        now: datetime = datetime.now()
-        current_day: datetime = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        if self.last_reset_day is None or current_day > self.last_reset_day:
+    def _reset_quota(self) -> bool:
+        """
+        Resets the daily quota if a new day has started (at midnight).
+        Returns True when quota is reset due to new day; otherwise false
+        """
+        current_day: datetime.date = datetime.now().date()
+        last_reset_day: datetime.date = self.last_reset_day.date() if self.last_reset_day else None
+
+        if last_reset_day is None or current_day > last_reset_day:
             Domoticz.Debug(f'API Polling Quota reset for new day. Calls made yesterday: {self.calls_made_today}.')
             self.calls_made_today = 0
-            self.last_reset_day = current_day
+            self.last_reset_day = datetime.combine(current_day, datetime.min.time())
+            return True
+        return False
 
     def get_quota(self) -> int:
         """Get the current used daily API quota."""
@@ -361,7 +365,6 @@ class MqttClientHandler:
     MQTT_KEEP_ALIVE = 45 # I found out by testing that BMW disconnects after 60 seconds if no keep_alive received.
     THROTTLE_INTERVAL_SEC = 10 # Throttle timer from mqtt messages
     RECONNECTION_PAUSE_TIME_MIN = 15
-    MAX_DELAY_AUTOMATIC_RECONNECTION = 1800
     MQTT_MAX_INTERVAL_EXPECTED_MESSAGES = 3600*24
     MQTT_LOG = {16:'DEBUG', 1:'INFO', 2:'NOTICE', 8:'ERROR', 4:'WARNING'}
     
@@ -373,9 +376,8 @@ class MqttClientHandler:
         self.parent = parent_plugin
         self.mqtt_client: Union[mqtt.Client, None] = None
         self.time_last_message_received: datetime = datetime.min # Used for throttling
-        self.connected: bool = False
-        self.connection_errors: int = 0
         self.time_next_connect_after_critical_disconnect = None
+        self.connection_errors: int = 0
 
     def is_mqtt_active(self) -> bool:
         """ Check if there was MQTT activity during the last time period """
@@ -384,7 +386,8 @@ class MqttClientHandler:
         if delta < self.MQTT_MAX_INTERVAL_EXPECTED_MESSAGES:
             return True
         if 0 < delta % self.MQTT_MAX_INTERVAL_EXPECTED_MESSAGES < 60:
-            Domoticz.Status(f'No BMW MQTT CarData information was received since {self.time_last_message_received} (OAUTH2 internal state={AuthenticationData.state_machine}; MQTT Connected: {self.is_mqtt_connected()})!')
+            if self.time_last_message_received >= datetime.min:
+                Domoticz.Status(f'No BMW MQTT CarData information was received since {self.time_last_message_received} (OAUTH2 internal state={AuthenticationData.state_machine}; MQTT Connected: {self.is_mqtt_connected()})!')
         return False
 
     def is_mqtt_connected(self) -> bool:
@@ -405,17 +408,28 @@ class MqttClientHandler:
         if self.is_mqtt_connected():
             return True
 
+        # Check if there is already a connection in progress
+        if self.mqtt_client is not None:
+            Domoticz.Debug("MQTT connection attempt already in progress, skipping this heartbeat cycle.")
+            return False
+
         # No MQTT credentials available; finish first authentication process
         if AuthenticationData.state_machine != Authenticate.DONE:
             Domoticz.Debug('MQTT cannot start because of none-complete authentication.')
             return False
 
-        # Wait a period of time to make new connections if we had a "quota exceeded" error.
+        # Wait a period of time to make new connections if necessary.
         Domoticz.Debug(f'self.time_next_connect_after_critical_disconnect={self.time_next_connect_after_critical_disconnect}.')
         if self.time_next_connect_after_critical_disconnect:
             if datetime.now() < self.time_next_connect_after_critical_disconnect:
                 Domoticz.Debug(f'Wait to connect to MQTT due to errors. Next connection at {self.time_next_connect_after_critical_disconnect}.')
-                self.mqtt_client.loop_stop()
+                # Safety check: stop loop if client exists during cooldown
+                client = getattr(self, 'mqtt_client', None)
+                if client:
+                    try:
+                        client.loop_stop()
+                    except:
+                        pass
                 return False
             else:
                 self.time_next_connect_after_critical_disconnect = None
@@ -444,7 +458,9 @@ class MqttClientHandler:
 
         self.mqtt_client.tls_set()
         self.mqtt_client.username_pw_set(username, id_token)
-        self.mqtt_client.reconnect_delay_set(min_delay=1, max_delay=self.MAX_DELAY_AUTOMATIC_RECONNECTION)
+        # Be sure automatic connects by the mqtt loop are slower than reconnects triggered by heartbeat
+        self.mqtt_client.reconnect_delay_set(min_delay=600, max_delay=1800)
+
         if self.parent.loggingLevel == 0: 
             self.mqtt_client.disable_logger()
         else:
@@ -455,11 +471,12 @@ class MqttClientHandler:
             connect_properties = mqtt.Properties(mqtt.PacketTypes.CONNECT)
             connect_properties.SessionExpiryInterval = 3600
             Domoticz.Debug(f'Set up connection to MQTT broker with username {username} and password {id_token} (keep_alive={self.MQTT_KEEP_ALIVE}s)...')
-            self.mqtt_client.connect(CarDataURLs.MQTT_HOST, int(CarDataURLs.MQTT_PORT), keepalive=self.MQTT_KEEP_ALIVE, clean_start=False, properties=connect_properties)
+            self.mqtt_client.connect_async(CarDataURLs.MQTT_HOST, int(CarDataURLs.MQTT_PORT), keepalive=self.MQTT_KEEP_ALIVE, clean_start=False, properties=connect_properties)
             Domoticz.Debug('Start MQTT client loop...')
             self.mqtt_client.loop_start()
             self.connection_errors = 0
             return True
+
         except Exception as e:
             self.connection_errors += 1
             if self.connection_errors > 3:
@@ -474,13 +491,36 @@ class MqttClientHandler:
         """Disconnects from the MQTT broker and optionally attempts an immediate reconnect."""
 
         Domoticz.Debug(f'Call disconnect_mqtt() with reconnect={reconnect}...')
-        if self.mqtt_client:
-            #self.mqtt_client.user_data_set({'reconnect': reconnect})
-            self.mqtt_client.disconnect()   # 1. Initiate disconnect first. This signals the network thread to send the DISCONNECT packet and start running the onMqttDisconnect callback.
-            time.sleep(0.5)                 # 2. Wait briefly. This gives the background thread time to process the disconnect and fire the onMqttDisconnect callback, which sets self.connected = False.
-            self.mqtt_client.loop_stop()    # 3. Explicitly stop the background loop thread. This call blocks and waits for the thread to fully exit (join), ensuring synchronous cleanup and preventing the Python interpreter shutdown race condition.
+
+        # Create a local reference to the client object.
+        # This prevents the object from becoming None mid-execution if another thread 
+        # (like an error handler) clears self.mqtt_client.
+        client = getattr(self, 'mqtt_client', None)
+        
+        if client is not None:
+            try:
+                # If the client is in a reconnection loop (e.g., bad credentials),
+                # loop_stop() is mandatory to kill the background thread.
+                if not client.is_connected():
+                    Domoticz.Debug("MQTT not connected, forcing loop_stop to kill background threads.")
+                    client.loop_stop()
+                else:
+                    # There is an active connection
+                    client.disconnect()         # 1. Initiate disconnect first. This signals the network thread to send the DISCONNECT packet and start running the onMqttDisconnect callback.
+                    time.sleep(0.2)             # 2. Wait briefly. This gives the background thread time to process the disconnect and fire the onMqttDisconnect callback
+                    client.loop_stop()          # 3. Explicitly stop the background loop thread. This call blocks and waits for the thread to fully exit (join), ensuring synchronous cleanup and preventing the Python interpreter shutdown race condition.
+                
+                # Crucial: Give Python interpreter time to free up thread resources
+                time.sleep(0.5)
+            except Exception as e:
+                Domoticz.Error(f"Error during MQTT disconnect: {e}")
+            finally:
+                # Safely clear the global reference
+                self.mqtt_client = None
 
         if reconnect:
+            # Short pause
+            time.sleep(1.0)
             self.connect_mqtt()
 
     def onMqttConnect(
@@ -497,7 +537,6 @@ class MqttClientHandler:
         if rc == 0:
             #Domoticz.Status(f'Connected to MQTT broker successfully with userdata: {userdata} - flags: {flags} - rc: {rc} - properties: {properties}')
             Domoticz.Debug(f'Connected to MQTT broker successfully with userdata: {userdata} - flags: {flags} - rc: {rc} - properties: {properties}')
-            self.connected = True
 
             if hasattr(flags, 'session_present') and flags.session_present:
                 Domoticz.Debug(f'Subscriptions were kept by BMW CarData MQTT broker: no need to resubscribe!')
@@ -516,15 +555,29 @@ class MqttClientHandler:
 
         # Bad username/password, Not authorized, Quota exceeded
         elif rc in (134, 135, 151):
-            # Avoids that the MQTT client automatically reconnects by its loop
-            self.mqtt_client.loop_stop()
-            Domoticz.Error(f'BMW CarData MQTT connection error ({rc}): bad username/password (134), not authorized (135) or quota exceeded (151). Refreshing tokens to reconnect...')
+            # Direct stop of the background thread
+            client.loop_stop() 
+            # Clean up internal socket state, even if connection failed
+            try:
+                client.disconnect()
+            except:
+                pass # Ignore errors if already disconnected
+            # Clean up our own handler and set the error state
+            self.disconnect_mqtt()
+            Domoticz.Error(f'BMW CarData MQTT connection error ({rc}): refreshing tokens to reconnect...')
             AuthenticationData.state_machine = Authenticate.ERROR
             
         else:
             self.time_next_connect_after_critical_disconnect = datetime.now() + timedelta(minutes=self.RECONNECTION_PAUSE_TIME_MIN)
-            # Avoids that the MQTT client automatically reconnects by its loop
-            self.mqtt_client.loop_stop()
+            # Direct stop of the background thread
+            client.loop_stop() 
+            # Clean up internal socket state, even if connection failed
+            try:
+                client.disconnect()
+            except:
+                pass # Ignore errors if already disconnected
+            # Clean up our own handler and set the error state
+            self.disconnect_mqtt()
             Domoticz.Error(f'BMW CarData MQTT connection error ({rc}). Waiting {self.RECONNECTION_PAUSE_TIME_MIN} minutes to reconnect until {self.time_next_connect_after_critical_disconnect}. Additional token information: {self.parent.auth_handler.tokens_expiry}.')
 
     def onMqttMessage(self, 
@@ -581,9 +634,6 @@ class MqttClientHandler:
         ) -> None:
         """MQTT disconnect callback. Handles clean disconnects and token expiration detection."""
 
-        #reconnect: bool = False if not userdata else userdata.get('reconnect', False)
-        self.connected = False
-
         # Check for clean disconnect (rc=0) 
         if rc == 0:
             #Domoticz.Status(f'Normal disconnection from MQTT broker ({rc})')
@@ -604,13 +654,17 @@ class MqttClientHandler:
         else:
             ReasonString = None
             ServerReference = None
-            if hasattr(properties, 'ReasonString'):
-                ReasonString = properties.ReasonString
-            if hasattr(properties, 'ServerReference'):
-                ServerReference = properties.ServerReference
+            if properties:
+                if hasattr(properties, 'ReasonString'):
+                    ReasonString = properties.ReasonString
+                if hasattr(properties, 'ServerReference'):
+                    ServerReference = properties.ServerReference
             #Domoticz.Status(f'Unexpected disconnection from MQTT broker: {rc} ({ReasonString} - {ServerReference}).')
             Domoticz.Debug(f'Unexpected disconnection from MQTT broker: {rc} ({ReasonString} - {ServerReference}).')
             #MQTT Client automatically reconnects by its loop with a backoff mechanism
+
+        # Be sure all is cleaned up and mqtt_client is set to None to allow reconnections
+        self.disconnect_mqtt(reconnect=False)
 
     def onMqttLog(
         self,
@@ -1016,7 +1070,7 @@ class CarDataAPIHandler:
 
         # Errors not specifically handled
         else:
-            if status in (500):
+            if status in (500, ):
                 Domoticz.Status(f"BMW CarData API Error (rc={status} - internal state={APIData.state_machine}): {data}.")
             else:
                 Domoticz.Error(f"BMW CarData API Error (rc={status} - internal state={APIData.state_machine}): {data}.")
@@ -1039,9 +1093,9 @@ class CarDataAPIHandler:
         Domoticz.Debug(f"self.streaming_key_hash={self.streaming_key_hash} - APIData.container_id.get('hashContainerKeys', 0)={APIData.container_id.get('hashContainerKeys', 0)}")
         if self.streaming_key_hash != APIData.container_id.get('hashContainerKeys', ''):
             self.parent.bmwData[AuthenticationData.vin] = {}
-            Domoticz.Error(f"Information in configuration file {_STREAMING_KEY_FILE} (hash={self.streaming_key_hash}) does not match "
-                           f"BMW CarData Container (ContainerId={APIData.container_id.get('containerId', None)}; "
-                           f"hash={APIData.container_id.get('hashContainerKeys', None)}). A new BMW CarData Container will be created...")
+            Domoticz.Status(f"Information in configuration file {_STREAMING_KEY_FILE} (hash={self.streaming_key_hash}) does not match "
+                            f"BMW CarData Container (ContainerId={APIData.container_id.get('containerId', None)}; "
+                            f"hash={APIData.container_id.get('hashContainerKeys', None)}). A new BMW CarData Container will be created...")
             self._delete_container()
             return False
 
@@ -1241,25 +1295,49 @@ class BasePlugin:
         self.Stop = True
 
         # Save the PollingHandler state only upon plugin stop
-        self.polling_handler.save_state() 
+        polling = getattr(self, 'polling_handler', None)
+        if polling is not None:
+            try:
+                polling.save_state()
+            except Exception as e:
+                Domoticz.Error(f"Error saving state during onStop: {e}")
+
+        # Safely stop MQTT via the handler.
+        # Using getattr ensures we don't crash if mqtt_handler wasn't initialized.
+        handler = getattr(self, 'mqtt_handler', None)
+        if handler is not None:
+            try:
+                handler.disconnect_mqtt(reconnect=False)
+            except Exception as e:
+                Domoticz.Error(f"Error calling disconnect_mqtt during onStop: {e}")
 
         # Disconnections
-        if self.oauth2 and self.oauth2.Connected():
-            self.oauth2.Disconnect()
-        if self.api and self.api.Connected():
-            self.api.Disconnect()
-        self.mqtt_handler.disconnect_mqtt(reconnect=False)
+        oauth2 = getattr(self, 'oauth2', None)
+        if oauth2 and oauth2.Connected():
+            oauth2.Disconnect()
+        api = getattr(self, 'api', None)
+        if api and api.Connected():
+            api.Disconnect()
 
-        end_time = datetime.now() + timedelta(seconds=60)
-        while (self.mqtt_handler.connected or self.oauth2.Connected() or self.api.Connected()) and (datetime.now() < end_time):
-            Domoticz.Debug(f'Waiting on disconnections: mqtt disconnected: {self.mqtt_handler.connected}; oauth2 disconnected: {self.oauth2.Connected()}; API disconnected: {self.api.Connected()}')
-            time.sleep(0.1)
+        # Crash-safe waiting loop
+        # We use a 5-second timeout instead of 20 (Domoticz shutdown is often faster than 20s)
+        end_time = datetime.now() + timedelta(seconds=5)
+        
+        while datetime.now() < end_time:
+            # Check all statuses safely using local references or getattr
+            mqtt_connected = False
+            if handler is not None:
+                # Use getattr to safely check the 'connected' attribute of the handler
+                mqtt_connected = getattr(handler, 'connected', False)  
+            oauth_connected = oauth2.Connected() if oauth2 else False
+            api_connected = api.Connected() if api else False
 
-        # Check if threads are still running
-        #import threading
-        #for thread in threading.enumerate():
-        #    if thread.name != threading.current_thread().name:
-        #        Domoticz.Debug(f'Thread {thread.name} is still running and will generate a crash of Domoticz.')
+            if not mqtt_connected and not oauth_connected and not api_connected:
+                Domoticz.Debug("All connections closed successfully.")
+                break
+                
+            Domoticz.Debug(f'Waiting for disconnections: MQTT:{mqtt_connected}, OAuth2:{oauth_connected}, API:{api_connected}')
+            time.sleep(0.2)
 
     def onConnect(self, Connection: Domoticz.Connection, Status: int, Description: str) -> None:
         """Called when a connection attempt completes. Routes success to the relevant handler."""
