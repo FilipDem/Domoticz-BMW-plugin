@@ -386,7 +386,7 @@ class MqttClientHandler:
         if delta < self.MQTT_MAX_INTERVAL_EXPECTED_MESSAGES:
             return True
         if 0 < delta % self.MQTT_MAX_INTERVAL_EXPECTED_MESSAGES < 60:
-            if self.time_last_message_received >= datetime.min:
+            if self.time_last_message_received > datetime.min:
                 Domoticz.Status(f'No BMW MQTT CarData information was received since {self.time_last_message_received} (OAUTH2 internal state={AuthenticationData.state_machine}; MQTT Connected: {self.is_mqtt_connected()})!')
         return False
 
