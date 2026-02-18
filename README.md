@@ -27,7 +27,7 @@ From **plugin version 5.0.0**, this Domoticz plugin utilizes the official **BMW 
 | Function | Old API (Pre-5.0.0) | New API (CarData) | Note |
 | :--- | :--- | :--- | :--- |
 | **Data** | Full access (read/write) | **Read-only** | Remote services and charging limits are no longer supported. Related Domoticz devices will be marked as **UNUSED**. |
-| **Updates** | Polling | **Streaming (MQTT) + Smart Polling** | Combines direct updates (on status change) with limited On-demand API (max. 50/day). |
+| **Updates** | Polling | **Streaming (MQTT) + Smart Polling** | Combines direct updates (on status change) with limited On-demand API (max. 50/24h). |
 
 ### 2.2 Supported Information
 
@@ -112,7 +112,15 @@ When the plugin is started for the first time, an authentication status message 
 
 Successful authentication is confirmed with: *"BMW CarData Authentication successful! Starting BMW CarData MQTT connection..."* in the log.
 
-### 4.4 Streaming Configuration (`Bmw_keys_streaming.json`)
+### 4.4 Reset hardware settings
+
+The plugin stores information persistently in the Domoticz database (eg. authentication data, API polling data, ...). To reset all the parameters, create a file with filename "hardware_reset.txt" in the plugin directory and restart the plugin. All persistent data will be erased and has the following impact:
+
+* The OAuth2 authentication is required again.
+* A new container will be created with the defined keys for getting the CarData telematic data (API call).
+* All API polling management data is erased and will be re-initialised.
+
+### 4.5 Streaming Configuration (`Bmw_keys_streaming.json`)
 
 The file `Bmw_keys_streaming.json` maps the BMW CarData streaming keys to the implemented Domoticz devices. The file supports multiple cars.
 
