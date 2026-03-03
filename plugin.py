@@ -8,14 +8,14 @@ It uses the offical BMW's API (CarData) and creates
 corresponding devices in Domoticz.
 
 Author: Filip Demaertelaere
-Version: 5.1.1
+Version: 5.1.2
 License: MIT
 """
 """
-<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.1.1" externallink="https://github.com/FilipDem/Domoticz-BMW-plugin">
+<plugin key="Bmw" name="BMW CarData" author="Filip Demaertelaere" version="5.1.2" externallink="https://github.com/FilipDem/Domoticz-BMW-plugin">
     <description>
         <h2>BMW CarData Plugin</h2>
-        <p>Version 5.1.1</p>
+        <p>Version 5.1.2</p>
         <br/>
         <h2>Introduction</h2>
         <p>The BMW CarData plugin provides a robust and seamless integration of your BMW vehicle with the Domoticz home automation system, essentially transforming Domoticz into a comprehensive command center for your car.</p>
@@ -451,7 +451,7 @@ class MqttClientHandler:
         """Initializes the MQTT handler with a reference to the main plugin."""
         self.parent = parent_plugin
         self.mqtt_client: Union[mqtt.Client, None] = None
-        self.time_last_message_received: datetime = datetime.min # Used for throttling
+        self.time_last_message_received: datetime = datetime(1, 1, 1, 0, 0, 0) # Used for throttling
         self.time_next_connect_after_critical_disconnect = None
         self.connection_errors: int = 0
 
@@ -462,7 +462,7 @@ class MqttClientHandler:
         if delta < self.MQTT_MAX_INTERVAL_EXPECTED_MESSAGES:
             return True
         if 0 < delta % self.MQTT_MAX_INTERVAL_EXPECTED_MESSAGES < 60:
-            if self.time_last_message_received > datetime.min:
+            if self.time_last_message_received > datetime(1, 1, 1, 0, 0, 0):
                 Domoticz.Status(f'No BMW MQTT CarData information was received since {self.time_last_message_received} (OAUTH2 internal state={AuthenticationData.state_machine}; MQTT Connected: {self.is_mqtt_connected()})!')
         return False
 
